@@ -6,8 +6,9 @@ import json
 import torch.multiprocessing as mp
 import os
 from queue import Empty
-from typing import Optional
+from typing import Optional, Tuple
 from contextlib import nullcontext
+from datetime import datetime
 
 import torch as t
 from tqdm import tqdm
@@ -19,17 +20,15 @@ from .evaluation import evaluate
 from .trainers.standard import StandardTrainer
 
 
-def new_wandb_process(config, log_queue, entity, project):
-    wandb.init(entity=entity, project=project, config=config, name=config["wandb_name"])
+def new_wandb_process(log_queue, run):
     while True:
         try:
             log = log_queue.get(timeout=1)
             if log == "DONE":
                 break
-            wandb.log(log)
+            run.log(log)
         except Empty:
             continue
-    wandb.finish()
 
 
 def log_stats(
@@ -38,8 +37,8 @@ def log_stats(
     act: t.Tensor,
     activations_split_by_head: bool,
     transcoder: bool,
-    log_queues: list=[],
-    verbose: bool=False,
+    log_queues: list = [],
+    verbose: bool = False,
 ):
     with t.no_grad():
         # quick hack to make sure all trainers get the same x
@@ -66,10 +65,17 @@ def log_stats(
                 l0 = (f != 0).float().sum(dim=-1).mean().item()
 
             if verbose:
-                print(f"Step {step}: L0 = {l0}, frac_variance_explained = {frac_variance_explained}")
+                print(
+                    f"Step {step}: L0 = {l0}, frac_variance_explained = {frac_variance_explained}"
+                )
 
             # log parameters from training
-            log.update({f"{k}": v.cpu().item() if isinstance(v, t.Tensor) else v for k, v in losslog.items()})
+            log.update(
+                {
+                    f"{k}": v.cpu().item() if isinstance(v, t.Tensor) else v
+                    for k, v in losslog.items()
+                }
+            )
             log[f"l0"] = l0
             trainer_log = trainer.get_logging_parameters()
             for name, value in trainer_log.items():
@@ -80,23 +86,26 @@ def log_stats(
             if log_queues:
                 log_queues[i].put(log)
 
+
 def get_norm_factor(data, steps: int) -> float:
     """Per Section 3.1, find a fixed scalar factor so activation vectors have unit mean squared norm.
     This is very helpful for hyperparameter transfer between different layers and models.
     Use more steps for more accurate results.
     https://arxiv.org/pdf/2408.05147
-    
+
     If experiencing troubles with hyperparameter transfer between models, it may be worth instead normalizing to the square root of d_model.
     https://transformer-circuits.pub/2024/april-update/index.html#training-saes"""
     total_mean_squared_norm = 0
     count = 0
 
-    for step, act_BD in enumerate(tqdm(data, total=steps, desc="Calculating norm factor")):
+    for step, act_BD in enumerate(
+        tqdm(data, total=steps, desc="Calculating norm factor")
+    ):
         if step > steps:
             break
 
         count += 1
-        mean_squared_norm = t.mean(t.sum(act_BD ** 2, dim=1))
+        mean_squared_norm = t.mean(t.sum(act_BD**2, dim=1))
         total_mean_squared_norm += mean_squared_norm
 
     average_mean_squared_norm = total_mean_squared_norm / count
@@ -104,30 +113,30 @@ def get_norm_factor(data, steps: int) -> float:
 
     print(f"Average mean squared norm: {average_mean_squared_norm}")
     print(f"Norm factor: {norm_factor}")
-    
-    return norm_factor
 
+    return norm_factor
 
 
 def trainSAE(
     data,
     trainer_configs: list[dict],
     steps: int,
-    use_wandb:bool=False,
-    wandb_entity:str="",
-    wandb_project:str="",
-    save_steps:Optional[list[int]]=None,
-    save_dir:Optional[str]=None,
-    log_steps:Optional[int]=None,
-    activations_split_by_head:bool=False,
-    transcoder:bool=False,
-    run_cfg:dict={},
-    normalize_activations:bool=False,
-    verbose:bool=False,
-    device:str="cuda",
+    use_wandb: bool = False,
+    wandb_entity: str = "",
+    wandb_project: str = "",
+    save_steps: Optional[list[int]] = None,
+    save_dir: Optional[str] = None,
+    log_steps: Optional[int] = None,
+    activations_split_by_head: bool = False,
+    transcoder: bool = False,
+    run_cfg: dict = {},
+    normalize_activations: bool = False,
+    verbose: bool = False,
+    device: str = "cuda",
     autocast_dtype: t.dtype = t.float32,
-    backup_steps:Optional[int]=None,
-):
+    backup_steps: Optional[int] = None,
+    stop_wandb_logging: bool = True,
+) -> list[str] | Tuple[list[str], list[wandb.Run]]:
     """
     Train SAEs using the given trainers
 
@@ -139,7 +148,13 @@ def trainSAE(
     """
 
     device_type = "cuda" if "cuda" in device else "cpu"
-    autocast_context = nullcontext() if device_type == "cpu" else t.autocast(device_type=device_type, dtype=autocast_dtype)
+    autocast_context = (
+        nullcontext()
+        if device_type == "cpu"
+        else t.autocast(device_type=device_type, dtype=autocast_dtype)
+    )
+
+    timestamp = int(datetime.timestamp(datetime.now()))
 
     trainers = []
     for i, config in enumerate(trainer_configs):
@@ -150,6 +165,7 @@ def trainSAE(
         trainers.append(trainer_class(**config))
 
     wandb_processes = []
+    wandb_runs = []
     log_queues = []
 
     if use_wandb:
@@ -161,11 +177,20 @@ def trainSAE(
             log_queues.append(log_queue)
             wandb_config = trainer.config | run_cfg
             # Make sure wandb config doesn't contain any CUDA tensors
-            wandb_config = {k: v.cpu().item() if isinstance(v, t.Tensor) else v 
-                          for k, v in wandb_config.items()}
+            wandb_config = {
+                k: v.cpu().item() if isinstance(v, t.Tensor) else v
+                for k, v in wandb_config.items()
+            }
+            wandb_run = wandb.init(
+                entity=wandb_entity,
+                project=wandb_project,
+                config=config,
+                name=wandb_config["wandb_name"],
+            )
+            wandb_runs.append(wandb_run)
             wandb_process = mp.Process(
                 target=new_wandb_process,
-                args=(wandb_config, log_queue, wandb_entity, wandb_project),
+                args=(log_queue, wandb_run),
             )
             wandb_process.start()
             wandb_processes.append(wandb_process)
@@ -173,7 +198,7 @@ def trainSAE(
     # make save dirs, export config
     if save_dir is not None:
         save_dirs = [
-            os.path.join(save_dir, f"trainer_{i}") for i in range(len(trainer_configs))
+            os.path.join(save_dir, trainer.config["wandb_name"]) for trainer in trainers
         ]
         for trainer, dir in zip(trainers, save_dirs):
             os.makedirs(dir, exist_ok=True)
@@ -183,7 +208,12 @@ def trainSAE(
                 config["buffer"] = data.config
             except:
                 pass
-            with open(os.path.join(dir, "config.json"), "w") as f:
+            with open(
+                os.path.join(
+                    dir, f"config_{trainer.config['wandb_name']}_{timestamp}.json"
+                ),
+                "w",
+            ) as f:
                 json.dump(config, f, indent=4)
     else:
         save_dirs = [None for _ in trainer_configs]
@@ -209,7 +239,13 @@ def trainSAE(
         # logging
         if (use_wandb or verbose) and step % log_steps == 0:
             log_stats(
-                trainers, step, act, activations_split_by_head, transcoder, log_queues=log_queues, verbose=verbose
+                trainers,
+                step,
+                act,
+                activations_split_by_head,
+                transcoder,
+                log_queues=log_queues,
+                verbose=verbose,
             )
 
         # saving
@@ -228,7 +264,11 @@ def trainSAE(
                 checkpoint = {k: v.cpu() for k, v in trainer.ae.state_dict().items()}
                 t.save(
                     checkpoint,
-                    os.path.join(dir, "checkpoints", f"ae_{step}.pt"),
+                    os.path.join(
+                        dir,
+                        "checkpoints",
+                        f"{trainer.config['wandb_name']}_{step}_{timestamp}.pt",
+                    ),
                 )
 
                 if normalize_activations:
@@ -243,11 +283,11 @@ def trainSAE(
                 # this will be overwritten by the next checkpoint and at the end of training
                 t.save(
                     {
-                    "step": step,
-                    "ae": trainer.ae.state_dict(),
-                    "optimizer": trainer.optimizer.state_dict(),
-                    "config": trainer.config,
-                    "norm_factor": norm_factor,
+                        "step": step,
+                        "ae": trainer.ae.state_dict(),
+                        "optimizer": trainer.optimizer.state_dict(),
+                        "config": trainer.config,
+                        "norm_factor": norm_factor,
                     },
                     os.path.join(save_dir, "ae.pt"),
                 )
@@ -257,13 +297,24 @@ def trainSAE(
             with autocast_context:
                 trainer.update(step, act)
 
+    paths = []
     # save final SAEs
     for save_dir, trainer in zip(save_dirs, trainers):
         if normalize_activations:
             trainer.ae.scale_biases(norm_factor)
         if save_dir is not None:
             final = {k: v.cpu() for k, v in trainer.ae.state_dict().items()}
-            t.save(final, os.path.join(save_dir, "ae.pt"))
+            final_path = os.path.join(
+                save_dir, f"{trainer.config['wandb_name']}_{timestamp}.pt"
+            )
+            print(final_path)
+
+            t.save(final, final_path)
+            paths.append(final_path)
+
+    if use_wandb and stop_wandb_logging:
+        for run in wandb_runs:
+            run.finish()
 
     # Signal wandb processes to finish
     if use_wandb:
@@ -271,3 +322,8 @@ def trainSAE(
             queue.put("DONE")
         for process in wandb_processes:
             process.join()
+
+    if use_wandb and not stop_wandb_logging:
+        return paths, wandb_runs
+
+    return paths

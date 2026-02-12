@@ -249,7 +249,7 @@ class SoftTopKTrainer(SAETrainer):
         self.layer = layer
         self.lm_name = lm_name
         self.submodule_name = submodule_name
-        self.wandb_name = wandb_name
+        self.wandb_name = f"SoftTopKSAE_{lm_name}_{activation_dim}_{dict_size}_{k}"
         self.steps = steps
         self.decay_start = decay_start
         self.warmup_steps = warmup_steps
@@ -285,10 +285,12 @@ class SoftTopKTrainer(SAETrainer):
             "effective_l0",
             "dead_features",
             "pre_norm_auxk_loss",
+            "avg_k",
         ]
         self.effective_l0 = -1
         self.dead_features = -1
         self.pre_norm_auxk_loss = -1
+        self.avg_k = -1
 
         self.optimizer = torch.optim.Adam(
             self.ae.parameters(), lr=self.lr, betas=(0.9, 0.999)
@@ -382,9 +384,12 @@ class SoftTopKTrainer(SAETrainer):
         self.num_tokens_since_fired += num_tokens_in_step
         self.num_tokens_since_fired[did_fire] = 0
 
+        budget_loss = torch.clamp_min(estimated_k.mean() - self.k, 0)
+        self.avg_k = estimated_k.mean()
+
         l2_loss = e.pow(2).sum(dim=-1).mean()
         auxk_loss = self.get_auxiliary_loss(e.detach(), post_relu_acts)
-        loss = l2_loss + self.auxk_alpha * auxk_loss
+        loss = l2_loss + self.auxk_alpha * auxk_loss + budget_loss
 
         if not logging:
             return loss
