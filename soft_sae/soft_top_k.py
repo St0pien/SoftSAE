@@ -147,6 +147,9 @@ class SoftTopKSAE(Dictionary, nn.Module):
         self.register_buffer("k", torch.tensor(k, dtype=torch.int))
         self.register_buffer("alpha", torch.tensor(0.1, dtype=torch.float32))
         self.register_buffer("norm_factor", torch.tensor(1.0))
+        self.register_buffer(
+            "shift_factor", torch.zeros(activation_dim, dtype=torch.float32)
+        )
 
         self.decoder = nn.Linear(dict_size, activation_dim, bias=False)
         self.decoder.weight.data = set_decoder_norm_to_unit_norm(
@@ -165,14 +168,16 @@ class SoftTopKSAE(Dictionary, nn.Module):
             k_estimator_encoder, nn.ReLU(), nn.Linear(dict_size, 1), nn.Sigmoid()
         )
 
-    def estimate_k(self, x: torch.Tensor, normalized_input=True) -> torch.Tensor:
-        if not normalized_input:
-            x = x / self.norm_factor
+    def normalize(self, x: torch.Tensor):
+        return (x - self.shift_factor) / self.norm_factor
+
+    def denormalize(self, x: torch.Tensor):
+        return x * self.norm_factor + self.shift_factor
+
+    def estimate_k(self, x: torch.Tensor) -> torch.Tensor:
         return (self.k_estimator(x - self.b_dec) * 2 * self.k)[:, 0]
 
     def encode(self, x: torch.Tensor, return_active: bool = False, use_hard_top_k=True):
-        x = x / self.norm_factor
-
         post_relu_feat_acts = F.relu(self.encoder(x - self.b_dec))
         k_estimate = self.estimate_k(x)
 
@@ -180,7 +185,7 @@ class SoftTopKSAE(Dictionary, nn.Module):
             encoded_acts = topk_per_row(post_relu_feat_acts, k_estimate)
         else:
             weights = SoftTopK.apply(
-                post_relu_feat_acts, k_estimate, self.alpha, False, False
+                post_relu_feat_acts, k_estimate, self.alpha, False, True
             )
             encoded_acts = post_relu_feat_acts * weights
 
@@ -206,8 +211,9 @@ class SoftTopKSAE(Dictionary, nn.Module):
         else:
             return x_hat, encoded_acts, k_estimate
 
-    def scale_biases(self, scale: float):
-        self.norm_factor.fill_(scale)
+    def set_normalization(self, norm_factor: float, shift: torch.Tensor):
+        self.norm_factor.fill_(norm_factor)
+        self.shift_factor.copy_(shift)
 
     @classmethod
     def from_pretrained(cls, path, k=None, device=None, **kwargs) -> "SoftTopKSAE":
@@ -252,7 +258,7 @@ class SoftTopKTrainer(SAETrainer):
         self.layer = layer
         self.lm_name = lm_name
         self.submodule_name = submodule_name
-        self.wandb_name = f"SoftTopKSAE_{lm_name}_{activation_dim}_{dict_size}_{k}"
+        self.wandb_name = f"{wandb_name}_{lm_name}_{activation_dim}_{dict_size}_{k}"
         self.steps = steps
         self.decay_start = decay_start
         self.warmup_steps = warmup_steps
@@ -289,13 +295,11 @@ class SoftTopKTrainer(SAETrainer):
             "dead_features",
             "pre_norm_auxk_loss",
             "avg_k",
-            "grad_k_estimator",
         ]
         self.effective_l0 = -1
         self.dead_features = -1
         self.pre_norm_auxk_loss = -1
         self.avg_k = -1
-        self.grad_k_estimator = -1
 
         self.optimizer = torch.optim.Adam(
             self.ae.parameters(), lr=self.lr, betas=(0.9, 0.999)
@@ -373,13 +377,14 @@ class SoftTopKTrainer(SAETrainer):
             return torch.tensor(0, dtype=residual_BD.dtype, device=residual_BD.device)
 
     def loss(self, x, step=None, logging=False):
+        x_norm = self.ae.normalize(x)
         f, active_indices_F, post_relu_acts, estimated_k = self.ae.encode(
-            x, return_active=True, use_hard_top_k=False
+            x_norm, return_active=True, use_hard_top_k=False
         )
 
         x_hat = self.ae.decode(f)
 
-        e = x - x_hat
+        e = x_norm - x_hat
 
         self.effective_l0 = self.ae.k.item()
 
@@ -394,13 +399,13 @@ class SoftTopKTrainer(SAETrainer):
 
         l2_loss = e.pow(2).sum(dim=-1).mean()
         auxk_loss = self.get_auxiliary_loss(e.detach(), post_relu_acts)
-        loss = l2_loss + self.auxk_alpha * auxk_loss + budget_loss
+        loss = l2_loss
 
         if not logging:
             return loss
         else:
             return namedtuple("LossLog", ["x", "x_hat", "f", "losses"])(
-                x,
+                x_norm,
                 x_hat,
                 f,
                 {
@@ -412,22 +417,13 @@ class SoftTopKTrainer(SAETrainer):
 
     def update(self, step, x):
         if step == 0:
-            median = self.geometric_median(x)
+            median = self.geometric_median(self.ae.normalize(x))
             median = median.to(self.ae.b_dec.dtype)
             self.ae.b_dec.data = median
 
         x = x.to(self.device)
         loss = self.loss(x, step=step)
         loss.backward()
-
-        grad_summary = 0
-        k_count = 0
-        k_params = self.ae.k_estimator.parameters()
-        for p in k_params:
-            grad_summary += p.grad.norm().item()
-            k_count += 1
-
-        self.grad_k_estimator = grad_summary / k_count
 
         self.ae.decoder.weight.grad = remove_gradient_parallel_to_decoder_directions(
             self.ae.decoder.weight,

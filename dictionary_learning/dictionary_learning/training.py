@@ -2,6 +2,7 @@
 Training dictionaries
 """
 
+from enum import Enum
 import json
 import torch.multiprocessing as mp
 import os
@@ -87,7 +88,7 @@ def log_stats(
                 log_queues[i].put(log)
 
 
-def get_norm_factor(data, steps: int) -> float:
+def get_norm_shift_factor(data, steps: int, activation_dim: int) -> float:
     """Per Section 3.1, find a fixed scalar factor so activation vectors have unit mean squared norm.
     This is very helpful for hyperparameter transfer between different layers and models.
     Use more steps for more accurate results.
@@ -96,6 +97,7 @@ def get_norm_factor(data, steps: int) -> float:
     If experiencing troubles with hyperparameter transfer between models, it may be worth instead normalizing to the square root of d_model.
     https://transformer-circuits.pub/2024/april-update/index.html#training-saes"""
     total_mean_squared_norm = 0
+    center = t.zeros(activation_dim, dtype=t.float32)
     count = 0
 
     for step, act_BD in enumerate(
@@ -108,13 +110,24 @@ def get_norm_factor(data, steps: int) -> float:
         mean_squared_norm = t.mean(t.sum(act_BD**2, dim=1))
         total_mean_squared_norm += mean_squared_norm
 
+        center += t.mean(act_BD, dim=0).cpu()
+
     average_mean_squared_norm = total_mean_squared_norm / count
     norm_factor = t.sqrt(average_mean_squared_norm).item()
 
+    shift_factor = center / count
+
     print(f"Average mean squared norm: {average_mean_squared_norm}")
     print(f"Norm factor: {norm_factor}")
+    print(f"Shift factor mean: {shift_factor.mean().item()}")
 
-    return norm_factor
+    return norm_factor, shift_factor
+
+
+class ActivationsNormalization(Enum):
+    NONE = 1
+    SCALE = 2
+    SCALE_SHIFT = 3
 
 
 def trainSAE(
@@ -130,7 +143,7 @@ def trainSAE(
     activations_split_by_head: bool = False,
     transcoder: bool = False,
     run_cfg: dict = {},
-    normalize_activations: bool = False,
+    normalize_activations: ActivationsNormalization = ActivationsNormalization.NONE,
     verbose: bool = False,
     device: str = "cuda",
     autocast_dtype: t.dtype = t.float32,
@@ -218,20 +231,23 @@ def trainSAE(
     else:
         save_dirs = [None for _ in trainer_configs]
 
-    if normalize_activations:
-        norm_factor = get_norm_factor(data, steps=100)
+    norm_factor, shift_factor = get_norm_shift_factor(
+        data, steps=100, activation_dim=trainer.ae.activation_dim
+    )
 
-        for trainer in trainers:
-            trainer.config["norm_factor"] = norm_factor
-            # Verify that all autoencoders have a scale_biases method
-            trainer.ae.scale_biases(1.0)
+    if normalize_activations != ActivationsNormalization.SCALE_SHIFT:
+        shift_factor = 0.0
+    if normalize_activations == ActivationsNormalization.NONE:
+        norm_factor = 1.0
+
+    for trainer in trainers:
+        trainer.config["norm_factor"] = norm_factor
+        if normalize_activations == ActivationsNormalization.SCALE_SHIFT:
+            trainer.config["shift_factor_mean"] = shift_factor.mean().item()
+        trainer.ae.set_normalization(norm_factor, shift_factor)
 
     for step, act in enumerate(tqdm(data, total=steps)):
-
         act = act.to(dtype=autocast_dtype)
-
-        if normalize_activations:
-            act /= norm_factor
 
         if step >= steps:
             break
@@ -254,10 +270,6 @@ def trainSAE(
                 if dir is None:
                     continue
 
-                if normalize_activations:
-                    # Temporarily scale up biases for checkpoint saving
-                    trainer.ae.scale_biases(norm_factor)
-
                 if not os.path.exists(os.path.join(dir, "checkpoints")):
                     os.mkdir(os.path.join(dir, "checkpoints"))
 
@@ -270,9 +282,6 @@ def trainSAE(
                         f"{trainer.config['wandb_name']}_{step}_{timestamp}.pt",
                     ),
                 )
-
-                if normalize_activations:
-                    trainer.ae.scale_biases(1 / norm_factor)
 
         # backup
         if backup_steps is not None and step % backup_steps == 0:
@@ -300,8 +309,6 @@ def trainSAE(
     paths = []
     # save final SAEs
     for save_dir, trainer in zip(save_dirs, trainers):
-        if normalize_activations:
-            trainer.ae.scale_biases(norm_factor)
         if save_dir is not None:
             final = {k: v.cpu() for k, v in trainer.ae.state_dict().items()}
             final_path = os.path.join(

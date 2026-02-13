@@ -1,6 +1,6 @@
 from custom_core.npy_buffer import NpyActivationBuffer
 from soft_sae.soft_top_k import SoftTopKTrainer, SoftTopKSAE
-from dictionary_learning.training import trainSAE
+from dictionary_learning.training import trainSAE, ActivationsNormalization
 from dictionary_learning.evaluation import evaluate
 import torch
 
@@ -25,6 +25,7 @@ trainer_config = {
     "layer": -1,
     "lm_name": "CLIP",
     "warmup_steps": 1000,
+    "decay_start":  4000,
     "k": 64,
 }
 
@@ -37,7 +38,7 @@ paths, runs = trainSAE(
     wandb_entity="st0pien-default-team",
     wandb_project="SoftSAE",
     save_dir="results/checkpoints",
-    normalize_activations=True,
+    normalize_activations=ActivationsNormalization.SCALE_SHIFT,
     device="cuda",
     stop_wandb_logging=False,
 )
