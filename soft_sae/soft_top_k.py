@@ -145,7 +145,7 @@ class SoftTopKSAE(Dictionary, nn.Module):
 
         assert isinstance(k, int) and k > 0, f"k={k} must be a positive integer"
         self.register_buffer("k", torch.tensor(k, dtype=torch.int))
-        self.register_buffer("alpha", torch.tensor(0.001, dtype=torch.float32))
+        self.register_buffer("alpha", torch.tensor(0.1, dtype=torch.float32))
         self.register_buffer("norm_factor", torch.tensor(1.0))
 
         self.decoder = nn.Linear(dict_size, activation_dim, bias=False)
@@ -180,7 +180,7 @@ class SoftTopKSAE(Dictionary, nn.Module):
             encoded_acts = topk_per_row(post_relu_feat_acts, k_estimate)
         else:
             weights = SoftTopK.apply(
-                post_relu_feat_acts, k_estimate, self.alpha, False, True
+                post_relu_feat_acts, k_estimate, self.alpha, False, False
             )
             encoded_acts = post_relu_feat_acts * weights
 
@@ -289,11 +289,13 @@ class SoftTopKTrainer(SAETrainer):
             "dead_features",
             "pre_norm_auxk_loss",
             "avg_k",
+            "grad_k_estimator",
         ]
         self.effective_l0 = -1
         self.dead_features = -1
         self.pre_norm_auxk_loss = -1
         self.avg_k = -1
+        self.grad_k_estimator = -1
 
         self.optimizer = torch.optim.Adam(
             self.ae.parameters(), lr=self.lr, betas=(0.9, 0.999)
@@ -417,6 +419,15 @@ class SoftTopKTrainer(SAETrainer):
         x = x.to(self.device)
         loss = self.loss(x, step=step)
         loss.backward()
+
+        grad_summary = 0
+        k_count = 0
+        k_params = self.ae.k_estimator.parameters()
+        for p in k_params:
+            grad_summary += p.grad.norm().item()
+            k_count += 1
+
+        self.grad_k_estimator = grad_summary / k_count
 
         self.ae.decoder.weight.grad = remove_gradient_parallel_to_decoder_directions(
             self.ae.decoder.weight,
