@@ -146,6 +146,7 @@ class SoftTopKSAE(Dictionary, nn.Module):
         assert isinstance(k, int) and k > 0, f"k={k} must be a positive integer"
         self.register_buffer("k", torch.tensor(k, dtype=torch.int))
         self.register_buffer("alpha", torch.tensor(0.001, dtype=torch.float32))
+        self.register_buffer("norm_factor", torch.tensor(1.0))
 
         self.decoder = nn.Linear(dict_size, activation_dim, bias=False)
         self.decoder.weight.data = set_decoder_norm_to_unit_norm(
@@ -164,10 +165,14 @@ class SoftTopKSAE(Dictionary, nn.Module):
             k_estimator_encoder, nn.ReLU(), nn.Linear(dict_size, 1), nn.Sigmoid()
         )
 
-    def estimate_k(self, x: torch.Tensor) -> torch.Tensor:
+    def estimate_k(self, x: torch.Tensor, normalized_input=True) -> torch.Tensor:
+        if not normalized_input:
+            x = x / self.norm_factor
         return (self.k_estimator(x - self.b_dec) * 2 * self.k)[:, 0]
 
     def encode(self, x: torch.Tensor, return_active: bool = False, use_hard_top_k=True):
+        x = x / self.norm_factor
+
         post_relu_feat_acts = F.relu(self.encoder(x - self.b_dec))
         k_estimate = self.estimate_k(x)
 
@@ -202,9 +207,7 @@ class SoftTopKSAE(Dictionary, nn.Module):
             return x_hat, encoded_acts, k_estimate
 
     def scale_biases(self, scale: float):
-        self.encoder.bias.data *= scale
-        self.b_dec.data *= scale
-        self.k_estimator[0].bias.data *= scale
+        self.norm_factor.fill_(scale)
 
     @classmethod
     def from_pretrained(cls, path, k=None, device=None, **kwargs) -> "SoftTopKSAE":
