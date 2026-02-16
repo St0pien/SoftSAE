@@ -14,7 +14,7 @@ buffered_data = NpyActivationBuffer(
     dtype=torch.float32,
 )
 
-steps = 20_000
+steps = 40_000
 
 trainer_config = {
     "trainer": SoftTopKTrainer,
@@ -25,8 +25,9 @@ trainer_config = {
     "layer": -1,
     "lm_name": "CLIP",
     "warmup_steps": 1000,
-    "decay_start":  4000,
+    "decay_start": 4000,
     "k": 64,
+    "wandb_name": "trainable_k_test",
 }
 
 paths, runs = trainSAE(

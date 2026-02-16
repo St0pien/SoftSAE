@@ -167,12 +167,10 @@ def trainSAE(
         else t.autocast(device_type=device_type, dtype=autocast_dtype)
     )
 
-    timestamp = int(datetime.timestamp(datetime.now()))
-
     trainers = []
     for i, config in enumerate(trainer_configs):
         if "wandb_name" in config:
-            config["wandb_name"] = f"{config['wandb_name']}_trainer_{i}"
+            config["wandb_name"] = f"{config['wandb_name']}"
         trainer_class = config["trainer"]
         del config["trainer"]
         trainers.append(trainer_class(**config))
@@ -222,9 +220,7 @@ def trainSAE(
             except:
                 pass
             with open(
-                os.path.join(
-                    dir, f"config_{trainer.config['wandb_name']}_{timestamp}.json"
-                ),
+                os.path.join(dir, f"config_{trainer.config['wandb_name']}.json"),
                 "w",
             ) as f:
                 json.dump(config, f, indent=4)
@@ -279,7 +275,7 @@ def trainSAE(
                     os.path.join(
                         dir,
                         "checkpoints",
-                        f"{trainer.config['wandb_name']}_{step}_{timestamp}.pt",
+                        f"{trainer.config['wandb_name']}_{step}.pt",
                     ),
                 )
 
@@ -311,9 +307,7 @@ def trainSAE(
     for save_dir, trainer in zip(save_dirs, trainers):
         if save_dir is not None:
             final = {k: v.cpu() for k, v in trainer.ae.state_dict().items()}
-            final_path = os.path.join(
-                save_dir, f"{trainer.config['wandb_name']}_{timestamp}.pt"
-            )
+            final_path = os.path.join(save_dir, f"{trainer.config['wandb_name']}.pt")
             print(final_path)
 
             t.save(final, final_path)

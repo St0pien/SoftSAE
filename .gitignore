@@ -1,3 +1,5 @@
 wandb/
 results/
 env/
+**/__pycache__/
+lapsum/build/
