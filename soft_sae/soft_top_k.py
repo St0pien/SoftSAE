@@ -198,6 +198,7 @@ class SoftTopKTrainer(SAETrainer):
             "avg_k",
             "min_k",
             "max_k",
+            "k_loss",
         ]
         self.effective_l0 = -1
         self.dead_features = -1
@@ -205,6 +206,7 @@ class SoftTopKTrainer(SAETrainer):
         self.avg_k = -1
         self.min_k = -1
         self.max_k = -1
+        self.k_loss = -1
 
         self.optimizer = torch.optim.Adam(
             self.ae.parameters(), lr=self.lr, betas=(0.9, 0.999)
@@ -303,6 +305,7 @@ class SoftTopKTrainer(SAETrainer):
         self.avg_k = estimated_k.mean()
         self.min_k = estimated_k.min()
         self.max_k = estimated_k.max()
+        self.k_loss = budget_loss
 
         l2_loss = e.pow(2).sum(dim=-1).mean()
         auxk_loss = self.get_auxiliary_loss(e.detach(), post_relu_acts)
