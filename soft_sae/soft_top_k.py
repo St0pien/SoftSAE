@@ -44,7 +44,7 @@ class SoftTopKSAE(Dictionary, nn.Module):
 
         assert isinstance(k, int) and k > 0, f"k={k} must be a positive integer"
         self.register_buffer("k", torch.tensor(k, dtype=torch.int))
-        self.register_buffer("alpha", torch.tensor(0.1, dtype=torch.float32))
+        self.register_buffer("alpha", torch.tensor(0.001, dtype=torch.float32))
         self.register_buffer("norm_factor", torch.tensor(1.0))
         self.register_buffer(
             "shift_factor", torch.zeros(activation_dim, dtype=torch.float32)

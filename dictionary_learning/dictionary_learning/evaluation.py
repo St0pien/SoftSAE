@@ -186,7 +186,7 @@ def evaluate(
         try:
             x = next(activations).to(device)
             if normalize_batch:
-                x = x / x.norm(dim=-1).mean() * (dictionary.activation_dim**0.5)
+                x = dictionary.normalize(x)
         except StopIteration:
             raise StopIteration(
                 "Not enough activations in buffer. Pass a buffer with a smaller batch size or more data."
