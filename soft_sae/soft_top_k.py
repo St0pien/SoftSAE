@@ -128,7 +128,7 @@ class SoftTopKSAE(Dictionary, nn.Module):
             raise ValueError(f"k={k} != {state_dict['k'].item()}=state_dict['k']")
 
         if alpha is None:
-            k = state_dict["alpha"].item()
+            alpha = state_dict["alpha"].item()
         elif "alpha" in state_dict and alpha != state_dict["alpha"].item():
             raise ValueError(
                 f"alpha={k} != {state_dict['alpha'].item()}=state_dict['alpha']"

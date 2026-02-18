@@ -95,6 +95,7 @@ def sweep_run():
             device="cuda",
             n_batches=100,
             batch_size=4096,
+            normalize_batch=True,
         )
 
         run.summary.update({f"test/{key}": value for key, value in evals.items()})
