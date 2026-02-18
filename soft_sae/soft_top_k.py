@@ -86,7 +86,7 @@ class SoftTopKSAE(Dictionary, nn.Module):
             weights = soft_topk(
                 post_relu_feat_acts,
                 k_estimate.view((k_estimate.shape[0], 1)),
-                self.alpha,
+                self.alpha.clone(),
             )
             encoded_acts = post_relu_feat_acts * weights
 
@@ -215,7 +215,7 @@ class SoftTopKTrainer(SAETrainer):
             "min_k",
             "max_k",
             "k_loss",
-            "ae_alpha",
+            "ae_soft_topk_alpha",
             "use_hard_topk",
             "lr",
         ]
@@ -226,7 +226,7 @@ class SoftTopKTrainer(SAETrainer):
         self.min_k = -1
         self.max_k = -1
         self.k_loss = -1
-        self.ae_alpha = -1
+        self.ae_soft_topk_alpha = 1
         self.use_hard_topk = 0
 
         self.optimizer = torch.optim.Adam(
@@ -268,7 +268,7 @@ class SoftTopKTrainer(SAETrainer):
 
         assert (
             0 <= alpha_anneal_steps < self.steps
-        ), "k_anneal_steps must be >= 0 and < steps."
+        ), "alpha_anneal_steps must be >= 0 and < steps."
 
         step = min(step, alpha_anneal_steps)
         ratio = step / alpha_anneal_steps
@@ -357,7 +357,7 @@ class SoftTopKTrainer(SAETrainer):
         self.min_k = estimated_k.min()
         self.max_k = estimated_k.max()
         self.k_loss = k_loss
-        self.ae_alpha = self.ae.alpha
+        self.ae_soft_topk_alpha = self.ae.alpha.item()
         self.use_hard_topk = use_hard_topk
 
         l2_loss = e.pow(2).sum(dim=-1).mean()
