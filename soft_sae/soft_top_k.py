@@ -74,7 +74,7 @@ class SoftTopKSAE(Dictionary, nn.Module):
         return x * self.norm_factor + self.shift_factor
 
     def estimate_k(self, x: torch.Tensor) -> torch.Tensor:
-        return (self.k_estimator(x - self.b_dec) * 2 * self.k)[:, 0]
+        return (self.k_estimator(x - self.b_dec) * self.dict_size)[:, 0]
 
     def encode(self, x: torch.Tensor, return_active: bool = False, use_hard_topk=True):
         post_relu_feat_acts = F.relu(self.encoder(x - self.b_dec))
@@ -226,7 +226,7 @@ class SoftTopKTrainer(SAETrainer):
             "k_loss",
             "ae_soft_topk_alpha",
             "use_hard_topk",
-            "lr",
+            "lr_log",
         ]
         self.effective_l0 = -1
         self.dead_features = -1
@@ -246,6 +246,7 @@ class SoftTopKTrainer(SAETrainer):
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(
             self.optimizer, lr_lambda=lr_fn
         )
+        self.lr_log = self.scheduler.get_last_lr()[0]
 
         self.loss_map = {"budget": self.get_budget_loss, "kl0": self.get_kl0_loss}
 
@@ -368,6 +369,7 @@ class SoftTopKTrainer(SAETrainer):
         self.k_loss = k_loss
         self.ae_soft_topk_alpha = self.ae.alpha.item()
         self.use_hard_topk = 1 if use_hard_topk else 0
+        self.lr_log = self.scheduler.get_last_lr()[0]
 
         l2_loss = e.pow(2).sum(dim=-1).mean()
         auxk_loss = self.get_auxiliary_loss(e.detach(), post_relu_acts)
