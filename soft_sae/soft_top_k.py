@@ -117,7 +117,9 @@ class SoftTopKSAE(Dictionary, nn.Module):
         self.shift_factor.copy_(shift)
 
     @classmethod
-    def from_pretrained(cls, path, k=None, device=None, **kwargs) -> "SoftTopKSAE":
+    def from_pretrained(
+        cls, path, k=None, alpha=None, device=None, **kwargs
+    ) -> "SoftTopKSAE":
         state_dict = torch.load(path)
         dict_size, activation_dim = state_dict["encoder.weight"].shape
         if k is None:
@@ -125,7 +127,14 @@ class SoftTopKSAE(Dictionary, nn.Module):
         elif "k" in state_dict and k != state_dict["k"].item():
             raise ValueError(f"k={k} != {state_dict['k'].item()}=state_dict['k']")
 
-        autoencoder = cls(activation_dim, dict_size, k)
+        if alpha is None:
+            k = state_dict["alpha"].item()
+        elif "alpha" in state_dict and alpha != state_dict["alpha"].item():
+            raise ValueError(
+                f"alpha={k} != {state_dict['alpha'].item()}=state_dict['alpha']"
+            )
+
+        autoencoder = cls(activation_dim, dict_size, k, alpha)
         autoencoder.load_state_dict(state_dict)
         if device is not None:
             autoencoder.to(device)
@@ -358,7 +367,7 @@ class SoftTopKTrainer(SAETrainer):
         self.max_k = estimated_k.max()
         self.k_loss = k_loss
         self.ae_soft_topk_alpha = self.ae.alpha.item()
-        self.use_hard_topk = use_hard_topk
+        self.use_hard_topk = 1 if use_hard_topk else 0
 
         l2_loss = e.pow(2).sum(dim=-1).mean()
         auxk_loss = self.get_auxiliary_loss(e.detach(), post_relu_acts)
