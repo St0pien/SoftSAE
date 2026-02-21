@@ -65,7 +65,7 @@ with wandb.init(
     )
 
     trained_sae = SoftTopKSAE.from_pretrained(
-        "results/checkpoints/vague-sweep-90_CLIP_512_4096_256/vague-sweep-90_CLIP_512_4096_256.pt",
+        path,
         device="cuda",
     )
 

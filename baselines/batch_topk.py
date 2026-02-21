@@ -83,12 +83,6 @@ class BatchTopKSAE(Dictionary, nn.Module):
         self.norm_factor.fill_(norm_factor)
         self.shift_factor.copy_(shift)
 
-    def scale_biases(self, scale: float):
-        self.encoder.bias.data *= scale
-        self.b_dec.data *= scale
-        if self.threshold >= 0:
-            self.threshold *= scale
-
     @classmethod
     def from_pretrained(cls, path, k=None, device=None, **kwargs) -> "BatchTopKSAE":
         state_dict = t.load(path)
@@ -262,8 +256,9 @@ class BatchTopKTrainer(SAETrainer):
                 )
 
     def loss(self, x, step=None, logging=False):
+        x_norm = self.ae.normalize(x)
         f, active_indices_F, post_relu_acts_BF = self.ae.encode(
-            x, return_active=True, use_threshold=False
+            x_norm, return_active=True, use_threshold=False
         )
         # l0 = (f != 0).float().sum(dim=-1).mean().item()
 
@@ -272,7 +267,7 @@ class BatchTopKTrainer(SAETrainer):
 
         x_hat = self.ae.decode(f)
 
-        e = x - x_hat
+        e = x_norm - x_hat
 
         self.effective_l0 = self.ae.k.item()
 
@@ -290,7 +285,7 @@ class BatchTopKTrainer(SAETrainer):
             return loss
         else:
             return namedtuple("LossLog", ["x", "x_hat", "f", "losses"])(
-                x,
+                x_norm,
                 x_hat,
                 f,
                 {
@@ -302,7 +297,7 @@ class BatchTopKTrainer(SAETrainer):
 
     def update(self, step, x):
         if step == 0:
-            median = self.geometric_median(x)
+            median = self.geometric_median(self.ae.normalize(x))
             median = median.to(self.ae.b_dec.dtype)
             self.ae.b_dec.data = median
 
