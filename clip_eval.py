@@ -19,15 +19,15 @@ buffered_val_data = NpyActivationBuffer(
     seed=seed,
 )
 
-trained_sae = BatchTopKSAE.from_pretrained(
-    "results/checkpoints/BatchTopKSAE/BatchTopKSAE.pt",
-    device="cuda",
-)
-
-# trained_sae = SoftTopKSAE.from_pretrained(
-#     "results/checkpoints/vague-sweep-90_CLIP_512_4096_256/vague-sweep-90_CLIP_512_4096_256.pt",
-#     device="cuda"
+# trained_sae = BatchTopKSAE.from_pretrained(
+#     "results/checkpoints/BatchTopKSAE/BatchTopKSAE.pt",
+#     device="cuda",
 # )
+
+trained_sae = SoftTopKSAE.from_pretrained(
+    "results/checkpoints/vague-sweep-90_CLIP_512_4096_256/vague-sweep-90_CLIP_512_4096_256.pt",
+    device="cuda"
+)
 
 evals = evaluate(
     trained_sae,

@@ -4,14 +4,15 @@ from soft_sae.soft_top_k import SoftTopKSAE
 import torch
 from custom_core.npy_buffer import NpyActivationBuffer
 from custom_core.training import ActivationsNormalization, trainSAE
-from baselines.batch_topk import BatchTopKTrainer
+from baselines.batch_topk import BatchTopKTrainer, BatchTopKSAE
+from baselines.topk import TopKTrainer, AutoEncoderTopK
 import wandb
 
 seed = 42
 steps = 40_000
 
 trainer_config = {
-    "trainer": BatchTopKTrainer,
+    "trainer": TopKTrainer,
     "activation_dim": 512,
     "dict_size": 4096,
     "device": "cuda",
@@ -29,7 +30,7 @@ trainer_config = {
 }
 
 with wandb.init(
-    "st0pien-default-team", project="SoftSAE", name="BatchTopK_baseline"
+    "st0pien-default-team", project="SoftSAE", name="TopK_baseline"
 ) as run:
     buffered_data = NpyActivationBuffer(
         "../TopKSAE-research/data/cc3m_ViT-B~16_train_image_2905954_512.npy",
@@ -64,7 +65,7 @@ with wandb.init(
         seed=seed,
     )
 
-    trained_sae = SoftTopKSAE.from_pretrained(
+    trained_sae = AutoEncoderTopK.from_pretrained(
         path,
         device="cuda",
     )
