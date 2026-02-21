@@ -6,13 +6,17 @@ from custom_core.npy_buffer import NpyActivationBuffer
 from custom_core.training import ActivationsNormalization, trainSAE
 from baselines.batch_topk import BatchTopKTrainer, BatchTopKSAE
 from baselines.topk import TopKTrainer, AutoEncoderTopK
+from baselines.matryoshka_batch_topk import (
+    MatryoshkaBatchTopKSAE,
+    MatryoshkaBatchTopKTrainer,
+)
 import wandb
 
 seed = 42
 steps = 40_000
 
 trainer_config = {
-    "trainer": TopKTrainer,
+    "trainer": MatryoshkaBatchTopKTrainer,
     "activation_dim": 512,
     "dict_size": 4096,
     "device": "cuda",
@@ -27,11 +31,10 @@ trainer_config = {
     "k_anneal_steps": 3_700,
     "lr": 0.0007,
     "warmup_steps": 4_000,
+    "group_fractions": [0.1, 0.4, 0.5]
 }
 
-with wandb.init(
-    "st0pien-default-team", project="SoftSAE", name="TopK_baseline"
-) as run:
+with wandb.init("st0pien-default-team", project="SoftSAE", name="MSAE_baseline") as run:
     buffered_data = NpyActivationBuffer(
         "../TopKSAE-research/data/cc3m_ViT-B~16_train_image_2905954_512.npy",
         npy_length=2_905_954,
@@ -65,7 +68,7 @@ with wandb.init(
         seed=seed,
     )
 
-    trained_sae = AutoEncoderTopK.from_pretrained(
+    trained_sae = MatryoshkaBatchTopKSAE.from_pretrained(
         path,
         device="cuda",
     )
