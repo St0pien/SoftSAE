@@ -137,7 +137,7 @@ for batch in tqdm(dataloader):
 
     with torch.no_grad():
         feats = clip_model.encode_image(batch_tensor)
-        k_est = sae.estimate_k(feats)
+        k_est = sae.estimate_k(sae.normalize(feats))
 
     for i in range(len(k_est)):
         k_val = k_est[i].item()
