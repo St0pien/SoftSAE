@@ -5,6 +5,8 @@ import torch
 from custom_core.npy_buffer import NpyActivationBuffer
 from custom_core.training import ActivationsNormalization, trainSAE
 from baselines.batch_topk import BatchTopKTrainer, BatchTopKSAE
+from baselines.topk import AutoEncoderTopK
+from baselines.matryoshka_batch_topk import MatryoshkaBatchTopKSAE
 import wandb
 
 seed = 42
@@ -18,6 +20,16 @@ buffered_val_data = NpyActivationBuffer(
     dtype=torch.float32,
     seed=seed,
 )
+
+# trained_sae = AutoEncoderTopK.from_pretrained(
+#     "results/checkpoints/AutoEncoderTopK/AutoEncoderTopK.pt",
+#     device="cuda",
+# )
+
+# trained_sae = MatryoshkaBatchTopKSAE.from_pretrained(
+#     "results/checkpoints/MSAE/MS_SAE.pt", device="cuda"
+# )
+
 
 # trained_sae = BatchTopKSAE.from_pretrained(
 #     "results/checkpoints/BatchTopKSAE/BatchTopKSAE.pt",

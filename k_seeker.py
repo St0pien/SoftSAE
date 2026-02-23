@@ -104,7 +104,7 @@ stream_dataset = CC3MStreamDataset(
     max_samples=NUM_SAMPLES,
 )
 
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 
 
 def collate_fn(batch):

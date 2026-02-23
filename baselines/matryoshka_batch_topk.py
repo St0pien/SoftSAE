@@ -164,7 +164,7 @@ class MatryoshkaBatchTopKTrainer(SAETrainer):
         k_anneal_steps: Optional[int] = None,
         seed: Optional[int] = None,
         device: Optional[str] = None,
-        wandb_name: str = "BatchTopKSAE",
+        wandb_name: str = "MS_SAE",
         submodule_name: Optional[str] = None,
     ):
         super().__init__(seed)

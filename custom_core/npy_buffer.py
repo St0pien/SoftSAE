@@ -42,7 +42,7 @@ class NpyActivationBuffer:
             t.manual_seed(seed)
 
         # Memory-map the file (no load into RAM)
-        self.mm = np.memmap(self.npy_path, shape=(npy_length, d_submodule))
+        self.mm = np.memmap(self.npy_path, dtype="float32", shape=(npy_length, d_submodule))
         assert self.mm.ndim == 2, "Expected shape (N, d_submodule)"
         assert (
             self.mm.shape[1] == d_submodule
