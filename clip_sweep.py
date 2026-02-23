@@ -7,7 +7,7 @@ from custom_core.training import trainSAE, ActivationsNormalization
 from soft_sae.soft_top_k import SoftTopKTrainer, SoftTopKSAE
 
 sweep_parameters = {
-    "k_loss_type": {"values": ["budget", "kl0"]},
+    # "k_loss_type": {"values": ["budget", "kl0"]},
     "k_loss_weight": {"min": 0.0, "max": 5.0},
     "lr": {"min": 0.0001, "max": 0.001},
     "auxk_alpha": {"min": 0.01, "max": 0.1},
@@ -35,6 +35,7 @@ project = "SoftSAE"
 steps = 40_000
 seed = 42
 shared_config = {
+    "k_loss_type": "budget",
     "trainer": SoftTopKTrainer,
     "activation_dim": 512,
     "dict_size": 4096,
