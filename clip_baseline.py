@@ -11,12 +11,23 @@ from baselines.matryoshka_batch_topk import (
     MatryoshkaBatchTopKTrainer,
 )
 import wandb
+import argparse
 
 seed = 42
 steps = 40_000
 
+architectures = {
+    "TopK": {"trainer": TopKTrainer, "model": AutoEncoderTopK},
+    "BatchTopK": {"trainer": BatchTopKTrainer, "model": BatchTopKSAE},
+    "MSAE": {"trainer": MatryoshkaBatchTopKTrainer, "model": MatryoshkaBatchTopKSAE},
+}
+
+parser = argparse.ArgumentParser("clip_baseline")
+parser.add_argument("architecture", choices=architectures.keys())
+args = parser.parse_args()
+
 trainer_config = {
-    "trainer": MatryoshkaBatchTopKTrainer,
+    "trainer": architectures[args.architecture]["trainer"],
     "activation_dim": 512,
     "dict_size": 4096,
     "device": "cuda",
@@ -25,16 +36,19 @@ trainer_config = {
     "lm_name": "CLIP",
     "k": 256,
     "seed": seed,
-    "auxk_alpha": 0.044,
-    "dead_feature_threshold": 760_000,
-    "decay_start": 7_000,
-    "k_anneal_steps": 3_700,
-    "lr": 0.0007,
-    "warmup_steps": 4_000,
-    "group_fractions": [0.1, 0.4, 0.5]
+    "auxk_alpha": 0.086,
+    "dead_feature_threshold": 400_000,
+    "decay_start": 6500,
+    "k_anneal_steps": 1600,
+    "lr": 0.0006,
+    "warmup_steps": 2000,
 }
+if trainer_config["trainer"] == MatryoshkaBatchTopKTrainer:
+    trainer_config["group_fractions"] = [0.516, 0.258, 0.129, 0.065, 0.032]
 
-with wandb.init("st0pien-default-team", project="SoftSAE", name="MSAE_baseline") as run:
+with wandb.init(
+    "st0pien-default-team", project="SoftSAE", name=f"{args.architecture}_baseline"
+) as run:
     buffered_data = NpyActivationBuffer(
         "../TopKSAE-research/data/cc3m_ViT-B~16_train_image_2905954_512.npy",
         npy_length=2_905_954,
@@ -68,7 +82,7 @@ with wandb.init("st0pien-default-team", project="SoftSAE", name="MSAE_baseline")
         seed=seed,
     )
 
-    trained_sae = MatryoshkaBatchTopKSAE.from_pretrained(
+    trained_sae = architectures[args.architecture]["model"].from_pretrained(
         path,
         device="cuda",
     )
