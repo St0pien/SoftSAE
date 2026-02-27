@@ -1,0 +1,14 @@
+{
+    "activation_dim": 512,
+    "dict_size": 4096,
+    "device": "cuda",
+    "layer": -1,
+    "lm_name": "CLIP",
+    "k": 256,
+    "auxk_alpha": 0.086,
+    "dead_feature_threshold": 400000,
+    "decay_start": 650,
+    "k_anneal_steps": 160,
+    "lr": 0.0006,
+    "warmup_steps": 200
+}
