@@ -166,7 +166,7 @@ class SoftTopKTrainer(SAETrainer):
         hard_topk_steps: Optional[int] = None,
         seed: Optional[int] = None,
         device: Optional[str] = None,
-        wandb_name: str = "SoftTopKSAE",
+        wandb_name: str = "SoftSAE",
         submodule_name: Optional[str] = None,
     ):
         super().__init__(seed)
@@ -340,11 +340,9 @@ class SoftTopKTrainer(SAETrainer):
     def loss(self, x, step=None, logging=False):
         x_norm = self.ae.normalize(x)
 
-        use_hard_topk = False
-        if self.hard_topk_steps is not None and step > (
+        use_hard_topk = self.hard_topk_steps is not None and step > (
             self.steps - self.hard_topk_steps
-        ):
-            use_hard_topk = True
+        )
 
         f, active_indices_F, post_relu_acts, estimated_k = self.ae.encode(
             x_norm, return_active=True, use_hard_topk=use_hard_topk

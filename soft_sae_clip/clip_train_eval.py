@@ -1,12 +1,12 @@
 from custom_core.evaluation import evaluate
 
-from soft_top_k import SoftTopKSAE, SoftTopKTrainer
+from soft_sae_clip.soft_sae import SoftTopKSAE, SoftTopKTrainer
 import torch
 from custom_core.npy_buffer import NpyActivationBuffer
 from custom_core.training import ActivationsNormalization, trainSAE
 from baselines.batch_topk import BatchTopKTrainer, BatchTopKSAE
-from baselines.topk import TopKTrainer, AutoEncoderTopK
-from baselines.matryoshka_batch_topk import (
+from soft_sae_clip.baselines.top_k import TopKTrainer, AutoEncoderTopK
+from soft_sae_clip.baselines.matryoshka_batch_top_k import (
     MatryoshkaBatchTopKSAE,
     MatryoshkaBatchTopKTrainer,
 )

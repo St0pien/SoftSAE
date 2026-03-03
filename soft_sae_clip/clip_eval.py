@@ -1,12 +1,12 @@
 from dictionary_learning.evaluation import evaluate
 
-from soft_top_k import SoftTopKSAE
+from soft_sae_clip.soft_sae import SoftTopKSAE
 import torch
 from custom_core.npy_buffer import NpyActivationBuffer
 from custom_core.training import ActivationsNormalization, trainSAE
 from baselines.batch_topk import BatchTopKTrainer, BatchTopKSAE
-from baselines.topk import AutoEncoderTopK
-from baselines.matryoshka_batch_topk import MatryoshkaBatchTopKSAE
+from soft_sae_clip.baselines.top_k import AutoEncoderTopK
+from soft_sae_clip.baselines.matryoshka_batch_top_k import MatryoshkaBatchTopKSAE
 from clip_train_eval import architectures
 import wandb
 import argparse

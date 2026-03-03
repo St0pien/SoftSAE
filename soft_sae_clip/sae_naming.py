@@ -17,7 +17,7 @@ from tqdm import tqdm
 import torch
 import random
 import numpy as np
-from soft_top_k import SoftTopKSAE
+from soft_sae_clip.soft_sae import SoftTopKSAE
 
 """
 Sparse Autoencoder (SAE) Utilities

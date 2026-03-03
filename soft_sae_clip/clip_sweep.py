@@ -4,7 +4,7 @@ import wandb
 import argparse
 from custom_core.npy_buffer import NpyActivationBuffer
 from custom_core.training import trainSAE, ActivationsNormalization
-from soft_top_k import SoftTopKTrainer, SoftTopKSAE
+from soft_sae_clip.soft_sae import SoftTopKTrainer, SoftTopKSAE
 
 sweep_parameters = {
     # "k_loss_type": {"values": ["budget", "kl0"]},
