@@ -2,14 +2,12 @@
 Training dictionaries
 """
 
-from enum import Enum
 import json
 import torch.multiprocessing as mp
 import os
 from queue import Empty
-from typing import Optional, Tuple
+from typing import Optional
 from contextlib import nullcontext
-from datetime import datetime
 
 import torch as t
 from tqdm import tqdm
@@ -21,15 +19,17 @@ from .evaluation import evaluate
 from .trainers.standard import StandardTrainer
 
 
-def new_wandb_process(log_queue, run):
+def new_wandb_process(config, log_queue, entity, project):
+    wandb.init(entity=entity, project=project, config=config, name=config["wandb_name"])
     while True:
         try:
             log = log_queue.get(timeout=1)
             if log == "DONE":
                 break
-            run.log(log)
+            wandb.log(log)
         except Empty:
             continue
+    wandb.finish()
 
 
 def log_stats(
@@ -88,7 +88,7 @@ def log_stats(
                 log_queues[i].put(log)
 
 
-def get_norm_shift_factor(data, steps: int, activation_dim: int) -> float:
+def get_norm_factor(data, steps: int) -> float:
     """Per Section 3.1, find a fixed scalar factor so activation vectors have unit mean squared norm.
     This is very helpful for hyperparameter transfer between different layers and models.
     Use more steps for more accurate results.
@@ -97,7 +97,6 @@ def get_norm_shift_factor(data, steps: int, activation_dim: int) -> float:
     If experiencing troubles with hyperparameter transfer between models, it may be worth instead normalizing to the square root of d_model.
     https://transformer-circuits.pub/2024/april-update/index.html#training-saes"""
     total_mean_squared_norm = 0
-    center = t.zeros(activation_dim, dtype=t.float32)
     count = 0
 
     for step, act_BD in enumerate(
@@ -110,24 +109,13 @@ def get_norm_shift_factor(data, steps: int, activation_dim: int) -> float:
         mean_squared_norm = t.mean(t.sum(act_BD**2, dim=1))
         total_mean_squared_norm += mean_squared_norm
 
-        center += t.mean(act_BD, dim=0).cpu()
-
     average_mean_squared_norm = total_mean_squared_norm / count
     norm_factor = t.sqrt(average_mean_squared_norm).item()
 
-    shift_factor = center / count
-
     print(f"Average mean squared norm: {average_mean_squared_norm}")
     print(f"Norm factor: {norm_factor}")
-    print(f"Shift factor mean: {shift_factor.mean().item()}")
 
-    return norm_factor, shift_factor
-
-
-class ActivationsNormalization(Enum):
-    NONE = 1
-    SCALE = 2
-    SCALE_SHIFT = 3
+    return norm_factor
 
 
 def trainSAE(
@@ -143,13 +131,12 @@ def trainSAE(
     activations_split_by_head: bool = False,
     transcoder: bool = False,
     run_cfg: dict = {},
-    normalize_activations: ActivationsNormalization = ActivationsNormalization.NONE,
+    normalize_activations: bool = False,
     verbose: bool = False,
     device: str = "cuda",
     autocast_dtype: t.dtype = t.float32,
     backup_steps: Optional[int] = None,
-    stop_wandb_logging: bool = True,
-) -> list[str] | Tuple[list[str], list[wandb.Run]]:
+):
     """
     Train SAEs using the given trainers
 
@@ -170,13 +157,12 @@ def trainSAE(
     trainers = []
     for i, config in enumerate(trainer_configs):
         if "wandb_name" in config:
-            config["wandb_name"] = f"{config['wandb_name']}"
+            config["wandb_name"] = f"{config['wandb_name']}_trainer_{i}"
         trainer_class = config["trainer"]
         del config["trainer"]
         trainers.append(trainer_class(**config))
 
     wandb_processes = []
-    wandb_runs = []
     log_queues = []
 
     if use_wandb:
@@ -192,16 +178,9 @@ def trainSAE(
                 k: v.cpu().item() if isinstance(v, t.Tensor) else v
                 for k, v in wandb_config.items()
             }
-            wandb_run = wandb.init(
-                entity=wandb_entity,
-                project=wandb_project,
-                config=config,
-                name=wandb_config["wandb_name"],
-            )
-            wandb_runs.append(wandb_run)
             wandb_process = mp.Process(
                 target=new_wandb_process,
-                args=(log_queue, wandb_run),
+                args=(wandb_config, log_queue, wandb_entity, wandb_project),
             )
             wandb_process.start()
             wandb_processes.append(wandb_process)
@@ -209,7 +188,7 @@ def trainSAE(
     # make save dirs, export config
     if save_dir is not None:
         save_dirs = [
-            os.path.join(save_dir, trainer.config["wandb_name"]) for trainer in trainers
+            os.path.join(save_dir, f"trainer_{i}") for i in range(len(trainer_configs))
         ]
         for trainer, dir in zip(trainers, save_dirs):
             os.makedirs(dir, exist_ok=True)
@@ -219,31 +198,25 @@ def trainSAE(
                 config["buffer"] = data.config
             except:
                 pass
-            with open(
-                os.path.join(dir, f"config_{trainer.config['wandb_name']}.json"),
-                "w",
-            ) as f:
+            with open(os.path.join(dir, "config.json"), "w") as f:
                 json.dump(config, f, indent=4)
     else:
         save_dirs = [None for _ in trainer_configs]
 
-    norm_factor, shift_factor = get_norm_shift_factor(
-        data, steps=100, activation_dim=trainer.ae.activation_dim
-    )
+    if normalize_activations:
+        norm_factor = get_norm_factor(data, steps=100)
 
-    if normalize_activations != ActivationsNormalization.SCALE_SHIFT:
-        shift_factor = 0.0
-    if normalize_activations == ActivationsNormalization.NONE:
-        norm_factor = 1.0
-
-    for trainer in trainers:
-        trainer.config["norm_factor"] = norm_factor
-        if normalize_activations == ActivationsNormalization.SCALE_SHIFT:
-            trainer.config["shift_factor_mean"] = shift_factor.mean().item()
-        trainer.ae.set_normalization(norm_factor, shift_factor)
+        for trainer in trainers:
+            trainer.config["norm_factor"] = norm_factor
+            # Verify that all autoencoders have a scale_biases method
+            trainer.ae.scale_biases(1.0)
 
     for step, act in enumerate(tqdm(data, total=steps)):
+
         act = act.to(dtype=autocast_dtype)
+
+        if normalize_activations:
+            act /= norm_factor
 
         if step >= steps:
             break
@@ -266,18 +239,21 @@ def trainSAE(
                 if dir is None:
                     continue
 
+                if normalize_activations:
+                    # Temporarily scale up biases for checkpoint saving
+                    trainer.ae.scale_biases(norm_factor)
+
                 if not os.path.exists(os.path.join(dir, "checkpoints")):
                     os.mkdir(os.path.join(dir, "checkpoints"))
 
                 checkpoint = {k: v.cpu() for k, v in trainer.ae.state_dict().items()}
                 t.save(
                     checkpoint,
-                    os.path.join(
-                        dir,
-                        "checkpoints",
-                        f"{trainer.config['wandb_name']}_{step}.pt",
-                    ),
+                    os.path.join(dir, "checkpoints", f"ae_{step}.pt"),
                 )
+
+                if normalize_activations:
+                    trainer.ae.scale_biases(1 / norm_factor)
 
         # backup
         if backup_steps is not None and step % backup_steps == 0:
@@ -302,20 +278,13 @@ def trainSAE(
             with autocast_context:
                 trainer.update(step, act)
 
-    paths = []
     # save final SAEs
     for save_dir, trainer in zip(save_dirs, trainers):
+        if normalize_activations:
+            trainer.ae.scale_biases(norm_factor)
         if save_dir is not None:
             final = {k: v.cpu() for k, v in trainer.ae.state_dict().items()}
-            final_path = os.path.join(save_dir, f"{trainer.config['wandb_name']}.pt")
-            print(final_path)
-
-            t.save(final, final_path)
-            paths.append(final_path)
-
-    if use_wandb and stop_wandb_logging:
-        for run in wandb_runs:
-            run.finish()
+            t.save(final, os.path.join(save_dir, "ae.pt"))
 
     # Signal wandb processes to finish
     if use_wandb:
@@ -323,8 +292,3 @@ def trainSAE(
             queue.put("DONE")
         for process in wandb_processes:
             process.join()
-
-    if use_wandb and not stop_wandb_logging:
-        return paths, wandb_runs
-
-    return paths

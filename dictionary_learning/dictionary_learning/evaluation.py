@@ -5,11 +5,10 @@ Utilities for evaluating dictionaries on a model and dataset.
 import torch as t
 from collections import defaultdict
 
-from tqdm import tqdm
-
 from .buffer import ActivationBuffer, NNsightActivationBuffer
 from nnsight import LanguageModel
 from .config import DEBUG
+from tqdm import tqdm
 
 
 def loss_recovered(
@@ -182,19 +181,16 @@ def evaluate(
     out = defaultdict(float)
     active_features = t.zeros(dictionary.dict_size, dtype=t.float32, device=device)
 
-    for _ in tqdm(range(n_batches), desc="Evaluating"):
+    for _ in tqdm(range(n_batches)):
         try:
             x = next(activations).to(device)
-            x_norm = dictionary.normalize(x) if normalize_batch else x.clone()
+            if normalize_batch:
+                x = x / x.norm(dim=-1).mean() * (dictionary.activation_dim**0.5)
         except StopIteration:
             raise StopIteration(
                 "Not enough activations in buffer. Pass a buffer with a smaller batch size or more data."
             )
-        outputs = dictionary(x_norm, output_features=True)
-        x_hat = outputs[0]
-        f = outputs[1]
-        if normalize_batch:
-            x_hat = dictionary.denormalize(x_hat)
+        x_hat, f = dictionary(x, output_features=True)
         l2_loss = t.linalg.norm(x - x_hat, dim=-1).mean()
         l1_loss = f.norm(p=1, dim=-1).mean()
         l0 = (f != 0).float().sum(dim=-1).mean()

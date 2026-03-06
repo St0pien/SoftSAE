@@ -69,7 +69,7 @@ def test_sae_training():
 
     # model = LanguageModel(MODEL_NAME, dispatch=True, device_map=DEVICE)
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, device_map="auto", torch_dtype=t.float32
+        MODEL_NAME, device_map="auto", dtype=t.float32
     ).to(DEVICE)
 
     context_length = 128
