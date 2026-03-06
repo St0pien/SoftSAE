@@ -1,0 +1,7 @@
+*.json
+*.pt
+*wandb/
+*__pycache__/
+*.out
+*.venv
+*.DS_Store
