@@ -17,17 +17,15 @@ from transformers import AutoTokenizer
 
 import demo_config
 
-# Kind of janky double importing dictionary_learning.dictionary_learning, but it works
-# This is leftover from when dictionary_learning was a only used as a submodule
-from dictionary_learning.dictionary_learning.utils import (
+from dictionary_learning.utils import (
     hf_dataset_to_generator,
     hf_mixed_dataset_to_generator,
     hf_sequence_packing_dataset_to_generator,
 )
-from dictionary_learning.dictionary_learning.pytorch_buffer import ActivationBuffer
-from dictionary_learning.dictionary_learning.evaluation import evaluate
-from dictionary_learning.dictionary_learning.training import trainSAE
-import dictionary_learning.dictionary_learning.utils as utils
+from dictionary_learning.pytorch_buffer import ActivationBuffer
+from dictionary_learning.evaluation import evaluate
+from dictionary_learning.training import trainSAE
+import dictionary_learning.utils as utils
 
 
 def get_args():

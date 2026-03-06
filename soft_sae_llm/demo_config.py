@@ -4,26 +4,26 @@ from enum import Enum
 import torch as t
 import itertools
 
-from dictionary_learning.dictionary_learning.trainers.standard import (
+from dictionary_learning.trainers.standard import (
     StandardTrainer,
     StandardTrainerAprilUpdate,
 )
-from dictionary_learning.dictionary_learning.trainers.top_k import (
+from dictionary_learning.trainers.top_k import (
     TopKTrainer,
     AutoEncoderTopK,
 )
-from dictionary_learning.dictionary_learning.trainers.batch_top_k import (
+from dictionary_learning.trainers.batch_top_k import (
     BatchTopKTrainer,
     BatchTopKSAE,
 )
-from dictionary_learning.dictionary_learning.trainers.gdm import GatedSAETrainer
-from dictionary_learning.dictionary_learning.trainers.p_anneal import PAnnealTrainer
-from dictionary_learning.dictionary_learning.trainers.jumprelu import JumpReluTrainer
-from dictionary_learning.dictionary_learning.trainers.matryoshka_batch_top_k import (
+from dictionary_learning.trainers.gdm import GatedSAETrainer
+from dictionary_learning.trainers.p_anneal import PAnnealTrainer
+from dictionary_learning.trainers.jumprelu import JumpReluTrainer
+from dictionary_learning.trainers.matryoshka_batch_top_k import (
     MatryoshkaBatchTopKTrainer,
     MatryoshkaBatchTopKSAE,
 )
-from dictionary_learning.dictionary_learning.dictionary import (
+from dictionary_learning.dictionary import (
     AutoEncoder,
     GatedAutoEncoder,
     AutoEncoderNew,
