@@ -23,6 +23,7 @@ from dictionary_learning.trainers.matryoshka_batch_top_k import (
     MatryoshkaBatchTopKTrainer,
     MatryoshkaBatchTopKSAE,
 )
+from dictionary_learning.trainers.soft_sae import SoftSAETrainer, SoftSAE
 from dictionary_learning.dictionary import (
     AutoEncoder,
     GatedAutoEncoder,
@@ -40,6 +41,7 @@ class TrainerType(Enum):
     P_ANNEAL = "p_anneal"
     JUMP_RELU = "jump_relu"
     Matryoshka_BATCH_TOP_K = "matryoshka_batch_top_k"
+    SOFT_SAE = "soft_sae"
 
 
 @dataclass
@@ -77,7 +79,7 @@ max_activation_norm_multiple = 10
 learning_rates = [5e-5]
 
 
-wandb_project = "qwen-8b-sweep"
+wandb_project = "SoftSAE-LLM"
 
 LLM_CONFIG = {
     "EleutherAI/pythia-70m-deduped": LLMConfig(
@@ -217,6 +219,20 @@ class JumpReluTrainerConfig(BaseTrainerConfig):
     sparsity_warmup_steps: Optional[int]
     sparsity_penalty: float = 1.0
     bandwidth: float = 0.001
+
+
+@dataclass
+class SoftSAETrainerConfig(BaseTrainerConfig):
+    dict_size: int
+    seed: int
+    lr: float
+    k: int
+    auxk_alpha: float = 1 / 32
+    k_anneal_steps: Optional[int] = None
+    alpha_anneal_steps: Optional[int] = None
+    k_loss_weight: float = 1.0
+    soft_topk_alpha: float = 0.0001
+    hard_topk_steps: Optional[int] = None
 
 
 def get_trainer_configs(
@@ -383,6 +399,25 @@ def get_trainer_configs(
                 seed=seed,
                 target_l0=target_l0,
                 wandb_name=f"JumpReluTrainer-{model_name}-{submodule_name}",
+            )
+            trainer_configs.append(asdict(config))
+
+    if TrainerType.SOFT_SAE.value in architectures:
+        for seed, dict_size, learning_rate, k in itertools.product(
+            seeds, dict_sizes, learning_rates, TARGET_L0s
+        ):
+            config = SoftSAETrainerConfig(
+                **base_config,
+                trainer=SoftSAETrainer,
+                dict_class=SoftSAE,
+                lr=learning_rate,
+                dict_size=dict_size,
+                seed=seed,
+                k=k,
+                k_anneal_steps=anneal_end,
+                alpha_anneal_steps=40_000,
+                hard_topk_steps=40_000,
+                wandb_name=f"SoftSAETrainer-{model_name}-{submodule_name}",
             )
             trainer_configs.append(asdict(config))
 

@@ -188,4 +188,15 @@ def soft_topk(
     # Automatically handle dimension wrapping for negative dim values
     dim = dim if dim >= 0 else x.dim() + dim
 
-    return SoftTopK.apply(x, k, alpha, dim, largest)
+    orig_dtype = x.dtype
+
+    if orig_dtype in (torch.float16, torch.bfloat16):
+        x = x.float()
+        k = k.float()
+
+    prob = SoftTopK.apply(x, k, alpha, dim, largest)
+
+    if prob.dtype != orig_dtype:
+        prob = prob.to(orig_dtype)
+
+    return prob

@@ -116,7 +116,7 @@ def run_sae_training(
         save_steps = None
 
     model = AutoModelForCausalLM.from_pretrained(
-        model_name, device_map="auto", torch_dtype=dtype
+        model_name, device_map="auto", dtype=dtype
     )
 
     model = utils.truncate_model(model, layer)
@@ -237,7 +237,7 @@ def eval_saes(
         max_layer = max(max_layer, layer)
 
     model = AutoModelForCausalLM.from_pretrained(
-        model_name, device_map="auto", torch_dtype=dtype
+        model_name, device_map="auto", dtype=dtype
     )
 
     model = utils.truncate_model(model, max_layer)
