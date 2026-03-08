@@ -60,7 +60,7 @@ class SparsityPenalties:
     gated: list[float]
 
 
-num_tokens = 10_000_000
+num_tokens = 50_000_000
 
 print(f"NOTE: Training on {num_tokens} tokens")
 
@@ -113,7 +113,7 @@ SPARSITY_PENALTIES = SparsityPenalties(
 )
 
 
-TARGET_L0s = [80, 160]
+TARGET_L0s = [80, 100, 160, 180]
 # TARGET_L0s = [20, 40, 80, 160, 320, 640]
 
 

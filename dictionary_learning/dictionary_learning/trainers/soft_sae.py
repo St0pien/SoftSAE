@@ -410,7 +410,7 @@ class SoftSAETrainer(SAETrainer):
     def config(self):
         return {
             "trainer_class": "SoftTopKTrainer",
-            "dict_class": "SoftTopKSAE",
+            "dict_class": "SoftSAE",
             "lr": self.lr,
             "steps": self.steps,
             "auxk_alpha": self.auxk_alpha,

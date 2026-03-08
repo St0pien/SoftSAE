@@ -12,6 +12,7 @@ import torch as t
 from .trainers.top_k import AutoEncoderTopK
 from .trainers.batch_top_k import BatchTopKSAE
 from .trainers.matryoshka_batch_top_k import MatryoshkaBatchTopKSAE
+from .trainers.soft_sae import SoftSAE
 from .dictionary import (
     AutoEncoder,
     GatedAutoEncoder,
@@ -174,7 +175,8 @@ def hf_sequence_packing_dataset_to_generator(
 ):
     """min_chars: minimum number of characters per sample. To perform sequence packing, set it to ~4x sequence length in tokens.
     Samples will be joined with the eos token.
-    If it's low (like 1), each sample will just be a single row from the dataset, padded to the max length. Sometimes this will fill the context, sometimes it won't."""
+    If it's low (like 1), each sample will just be a single row from the dataset, padded to the max length. Sometimes this will fill the context, sometimes it won't.
+    """
     assert min_chars > 0
 
     # Load both datasets as iterable streams
@@ -275,6 +277,8 @@ def load_dictionary(base_path: str, device: str) -> tuple:
         dictionary = MatryoshkaBatchTopKSAE.from_pretrained(ae_path, k=k, device=device)
     elif dict_class == "JumpReluAutoEncoder":
         dictionary = JumpReluAutoEncoder.from_pretrained(ae_path, device=device)
+    elif dict_class == "SoftSAE":
+        dictionary = SoftSAE.from_pretrained(ae_path, device=device)
     else:
         raise ValueError(f"Dictionary class {dict_class} not supported")
 
