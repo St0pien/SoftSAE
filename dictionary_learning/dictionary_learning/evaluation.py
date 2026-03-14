@@ -190,7 +190,9 @@ def evaluate(
             raise StopIteration(
                 "Not enough activations in buffer. Pass a buffer with a smaller batch size or more data."
             )
-        x_hat, f = dictionary(x, output_features=True)
+        outputs  = dictionary(x, output_features=True)
+        x_hat = outputs[0]
+        f = outputs[1]
         l2_loss = t.linalg.norm(x - x_hat, dim=-1).mean()
         l1_loss = f.norm(p=1, dim=-1).mean()
         l0 = (f != 0).float().sum(dim=-1).mean()

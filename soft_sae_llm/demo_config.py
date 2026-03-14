@@ -60,7 +60,7 @@ class SparsityPenalties:
     gated: list[float]
 
 
-num_tokens = 50_000_000
+num_tokens = 10_000_000
 
 print(f"NOTE: Training on {num_tokens} tokens")
 
@@ -72,7 +72,7 @@ dictionary_widths = [2**14, 2**16]
 WARMUP_STEPS = 100
 SPARSITY_WARMUP_STEPS = 500
 DECAY_START_FRACTION = 0.8
-K_ANNEAL_END_FRACTION = 0.01
+K_ANNEAL_END_FRACTION = 0.005
 remove_bos = True
 max_activation_norm_multiple = 10
 
@@ -415,8 +415,8 @@ def get_trainer_configs(
                 seed=seed,
                 k=k,
                 k_anneal_steps=anneal_end,
-                alpha_anneal_steps=4_000,
-                hard_topk_steps=4_000,
+                alpha_anneal_steps=None,
+                hard_topk_steps=4_880,
                 wandb_name=f"SoftSAETrainer-{model_name}-{submodule_name}",
             )
             trainer_configs.append(asdict(config))

@@ -16,7 +16,6 @@ from tqdm import tqdm
 
 import wandb
 
-
 def new_wandb_process(log_queue, run):
     while True:
         try:
