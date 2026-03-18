@@ -65,14 +65,14 @@ class SoftSAE(Dictionary, nn.Module):
         k_estimator_encoder.weight.data = self.encoder.weight.data.clone()
         k_estimator_encoder.bias.data.zero_()
         self.k_estimator = nn.Sequential(
-            k_estimator_encoder, nn.ReLU(), nn.Linear(dict_size, 1)
+            k_estimator_encoder, nn.ReLU(), nn.Linear(dict_size, 1), nn.Sigmoid()
         )
 
     def estimate_k(self, x: t.Tensor, with_norm_scaling=True):
         if with_norm_scaling:
             x = x / self.norm_factor
-        logit = self.k_estimator(x - self.b_dec)
-        k_hat = t.exp(logit).squeeze(-1)
+        logit = self.k_estimator(x - self.b_dec).squeeze(-1)
+        k_hat = logit * (self.k * 2)
         return t.clamp(k_hat, min=1, max=self.dict_size)
 
     def encode(
@@ -331,7 +331,8 @@ class SoftSAETrainer(SAETrainer):
             return t.tensor(0, dtype=residual_BD.dtype, device=residual_BD.device)
 
     def get_k_loss(self, estimated_k: t.Tensor):
-        return t.clamp_min(estimated_k.mean() - self.ae.k, 0)
+        # return t.clamp_min(estimated_k.mean() - self.ae.k, 0)
+        return F.softplus(estimated_k.mean() - self.ae.k, beta=5.0)
 
     def loss(self, x, step=None, logging=False):
 

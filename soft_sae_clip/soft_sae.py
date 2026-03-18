@@ -37,14 +37,25 @@ def topk_per_row(x, k):
 
 
 class SoftTopKSAE(Dictionary, nn.Module):
-    def __init__(self, activation_dim: int, dict_size: int, k: int, alpha: float):
+    def __init__(
+        self,
+        activation_dim: int,
+        dict_size: int,
+        k: int,
+        alpha: float,
+        k_max: Optional[int] = None,
+    ):
         super().__init__()
         self.activation_dim = activation_dim
         self.dict_size = dict_size
 
+        if k_max is None:
+            k_max = k * 2
+
         assert isinstance(k, int) and k > 0, f"k={k} must be a positive integer"
         self.register_buffer("k", torch.tensor(k, dtype=torch.int))
         self.register_buffer("alpha", torch.tensor(alpha, dtype=torch.float32))
+        self.register_buffer("k_max", torch.tensor(k_max, dtype=torch.int))
         self.register_buffer("norm_factor", torch.tensor(1.0))
         self.register_buffer(
             "shift_factor", torch.zeros(activation_dim, dtype=torch.float32)
@@ -74,18 +85,22 @@ class SoftTopKSAE(Dictionary, nn.Module):
         return x * self.norm_factor + self.shift_factor
 
     def estimate_k(self, x: torch.Tensor) -> torch.Tensor:
-        return (self.k_estimator(x - self.b_dec) * self.dict_size)[:, 0]
+        logit = self.k_estimator(x - self.b_dec).squeeze(-1)
+        k_hat = logit * (self.k_max)
+        return torch.clamp(k_hat, min=1, max=self.dict_size)
 
     def encode(self, x: torch.Tensor, return_active: bool = False, use_hard_topk=True):
         post_relu_feat_acts = F.relu(self.encoder(x - self.b_dec))
-        k_estimate = self.estimate_k(x)
 
         if use_hard_topk:
-            encoded_acts = topk_per_row(post_relu_feat_acts, k_estimate)
+            with torch.no_grad():
+                k_estimate = self.estimate_k(x).long()
+                encoded_acts = topk_per_row(post_relu_feat_acts, k_estimate)
         else:
+            k_estimate = self.estimate_k(x)
             weights = soft_topk(
                 post_relu_feat_acts,
-                k_estimate.view((k_estimate.shape[0], 1)),
+                k_estimate.view(k_estimate.shape[0], 1),
                 self.alpha.clone(),
             )
             encoded_acts = post_relu_feat_acts * weights
@@ -152,8 +167,8 @@ class SoftTopKTrainer(SAETrainer):
         k: int,
         layer: int,
         lm_name: str,
-        k_loss_type="budget",
         k_loss_weight=1.0,
+        k_loss_beta=5.0,
         soft_topk_alpha=0.0001,
         dict_class: type = SoftTopKSAE,
         lr: Optional[float] = None,
@@ -168,6 +183,7 @@ class SoftTopKTrainer(SAETrainer):
         device: Optional[str] = None,
         wandb_name: str = "SoftSAE",
         submodule_name: Optional[str] = None,
+        k_max: Optional[int] = None,
     ):
         super().__init__(seed)
         assert layer is not None and lm_name is not None
@@ -179,9 +195,10 @@ class SoftTopKTrainer(SAETrainer):
         self.decay_start = decay_start
         self.warmup_steps = warmup_steps
         self.k = k
+        self.k_max = k_max
         self.k_anneal_steps = k_anneal_steps
-        self.k_loss_type = k_loss_type
         self.k_loss_weight = k_loss_weight
+        self.k_loss_beta = k_loss_beta
         self.soft_topk_alpha = soft_topk_alpha
         self.alpha_anneal_steps = alpha_anneal_steps
         self.hard_topk_steps = hard_topk_steps
@@ -247,8 +264,6 @@ class SoftTopKTrainer(SAETrainer):
             self.optimizer, lr_lambda=lr_fn
         )
         self.lr_log = self.scheduler.get_last_lr()[0]
-
-        self.loss_map = {"budget": self.get_budget_loss, "kl0": self.get_kl0_loss}
 
     def update_annealed_k(
         self, step: int, activation_dim: int, k_anneal_steps: Optional[int] = None
@@ -331,11 +346,8 @@ class SoftTopKTrainer(SAETrainer):
             self.pre_norm_auxk_loss = -1
             return torch.tensor(0, dtype=residual_BD.dtype, device=residual_BD.device)
 
-    def get_kl0_loss(self, estimated_k: torch.Tensor):
-        return estimated_k.mean() / self.ae.k
-
-    def get_budget_loss(self, estimated_k: torch.Tensor):
-        return torch.clamp_min(estimated_k.mean() - self.ae.k, 0)
+    def get_k_loss(self, estimated_k: torch.Tensor):
+        return F.softplus(estimated_k.mean() - self.ae.k, beta=5.0)
 
     def loss(self, x, step=None, logging=False):
         x_norm = self.ae.normalize(x)
@@ -360,17 +372,16 @@ class SoftTopKTrainer(SAETrainer):
         self.num_tokens_since_fired += num_tokens_in_step
         self.num_tokens_since_fired[did_fire] = 0
 
-        k_loss = self.loss_map[self.k_loss_type](estimated_k)
         self.avg_k = estimated_k.mean()
         self.min_k = estimated_k.min()
         self.max_k = estimated_k.max()
-        self.k_loss = k_loss
         self.ae_soft_topk_alpha = self.ae.alpha.item()
         self.use_hard_topk = 1 if use_hard_topk else 0
         self.lr_log = self.scheduler.get_last_lr()[0]
 
         l2_loss = e.pow(2).sum(dim=-1).mean()
         auxk_loss = self.get_auxiliary_loss(e.detach(), post_relu_acts)
+        k_loss = self.get_k_loss(estimated_k)
         loss = l2_loss + self.k_loss_weight * k_loss + self.auxk_alpha * auxk_loss
 
         if not logging:
@@ -430,8 +441,8 @@ class SoftTopKTrainer(SAETrainer):
             "decay_start": self.decay_start,
             "top_k_aux": self.top_k_aux,
             "dead_feature_threshold": self.dead_feature_threshold,
-            "k_loss_type": self.k_loss_type,
             "k_loss_weight": self.k_loss_weight,
+            "k_loss_beta": self.k_loss_beta,
             "k_anneal_steps": self.k_anneal_steps,
             "alpha_anneal_steps": self.alpha_anneal_steps,
             "soft_topk_alpha": self.soft_topk_alpha,
@@ -440,6 +451,7 @@ class SoftTopKTrainer(SAETrainer):
             "activation_dim": self.ae.activation_dim,
             "dict_size": self.ae.dict_size,
             "k": self.ae.k.item(),
+            "k_max": self.ae.k_max.item(),
             "device": self.device,
             "layer": self.layer,
             "lm_name": self.lm_name,

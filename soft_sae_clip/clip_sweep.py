@@ -4,38 +4,65 @@ import wandb
 import argparse
 from custom_core.npy_buffer import NpyActivationBuffer
 from custom_core.training import trainSAE, ActivationsNormalization
-from soft_sae_clip.soft_sae import SoftTopKTrainer, SoftTopKSAE
+from soft_sae import SoftTopKTrainer, SoftTopKSAE
+
+# sweep_parameters = {
+#     "k_loss_weight": {"min": 0.0, "max": 5.0},
+#     "lr": {"min": 0.0001, "max": 0.001},
+#     "auxk_alpha": {"min": 0.01, "max": 0.1},
+#     "dead_feature_threshold": {
+#         "min": 100_000,
+#         "max": 1_000_000,
+#         "distribution": "int_uniform",
+#     },
+#     "warmup_steps": {"min": 0, "max": 5_000, "distribution": "int_uniform"},
+#     "decay_start": {"min": 5_001, "max": 10_000, "distribution": "int_uniform"},
+#     "k_anneal_steps": {"min": 0, "max": 10_000, "distribution": "int_uniform"},
+#     "alpha_anneal_steps": {"min": 0, "max": 10_000, "distribution": "int_uniform"},
+#     "hard_topk_steps": {"min": 0, "max": 10_000, "distribution": "int_uniform"},
+# }
+
+# sweep_configuration = {
+#     "method": "bayes",
+#     "metric": {"goal": "maximize", "name": "test/frac_variance_explained"},
+#     "parameters": sweep_parameters,
+# }
 
 sweep_parameters = {
-    # "k_loss_type": {"values": ["budget", "kl0"]},
-    "k_loss_weight": {"min": 0.0, "max": 5.0},
-    "lr": {"min": 0.0001, "max": 0.001},
-    "auxk_alpha": {"min": 0.01, "max": 0.1},
-    "dead_feature_threshold": {
-        "min": 100_000,
-        "max": 1_000_000,
-        "distribution": "int_uniform",
-    },
-    "warmup_steps": {"min": 0, "max": 5_000, "distribution": "int_uniform"},
-    "decay_start": {"min": 5_001, "max": 10_000, "distribution": "int_uniform"},
-    "k_anneal_steps": {"min": 0, "max": 10_000, "distribution": "int_uniform"},
-    "alpha_anneal_steps": {"min": 0, "max": 10_000, "distribution": "int_uniform"},
-    "hard_topk_steps": {"min": 0, "max": 10_000, "distribution": "int_uniform"},
+    "k": {"values": [60, 100, 140, 180, 220, 260]},
+    "k_max": {"values": [None, 400]},
+    "alpha_anneal_steps": {"values": [1000, 500, 4000, 6000]},
+    "hard_topk_steps": {"values": [6000, 8000, 4000, 2000]},
+    "lr": {"values": [0.0006, 0.001, 0.0001]},
+    "auxk_alpha": {"values": [0.1, 1.0, 0.5]},
+    "k_loss_weight": {"values": [2.0, 1.0, 0.5]},
 }
 
+
 sweep_configuration = {
-    "method": "bayes",
+    "method": "grid",
     "metric": {"goal": "maximize", "name": "test/frac_variance_explained"},
     "parameters": sweep_parameters,
 }
 
 entity = "st0pien-default-team"
-project = "SoftSAE"
+project = "SoftSAE-CLIP"
 
 steps = 40_000
 seed = 42
+# shared_config = {
+#     "trainer": SoftTopKTrainer,
+#     "activation_dim": 512,
+#     "dict_size": 4096,
+#     "soft_topk_alpha": 0.0001,
+#     "device": "cuda",
+#     "steps": steps,
+#     "layer": -1,
+#     "lm_name": "CLIP",
+#     "k": 256,
+#     "seed": seed,
+# }
 shared_config = {
-    "k_loss_type": "budget",
     "trainer": SoftTopKTrainer,
     "activation_dim": 512,
     "dict_size": 4096,
@@ -44,8 +71,11 @@ shared_config = {
     "steps": steps,
     "layer": -1,
     "lm_name": "CLIP",
-    "k": 256,
     "seed": seed,
+    "dead_feature_threshold": 400_000,
+    "decay_start": 6500,
+    "k_anneal_steps": 1600,
+    "warmup_steps": 1900,
 }
 
 
