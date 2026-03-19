@@ -372,9 +372,10 @@ class SoftTopKTrainer(SAETrainer):
         self.num_tokens_since_fired += num_tokens_in_step
         self.num_tokens_since_fired[did_fire] = 0
 
-        self.avg_k = estimated_k.mean()
+        self.avg_k = estimated_k.mean(dtype=torch.float32)
         self.min_k = estimated_k.min()
         self.max_k = estimated_k.max()
+        self.k_loss = k_loss
         self.ae_soft_topk_alpha = self.ae.alpha.item()
         self.use_hard_topk = 1 if use_hard_topk else 0
         self.lr_log = self.scheduler.get_last_lr()[0]
