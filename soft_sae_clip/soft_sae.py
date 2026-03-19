@@ -375,7 +375,6 @@ class SoftTopKTrainer(SAETrainer):
         self.avg_k = estimated_k.mean(dtype=torch.float32)
         self.min_k = estimated_k.min()
         self.max_k = estimated_k.max()
-        self.k_loss = k_loss
         self.ae_soft_topk_alpha = self.ae.alpha.item()
         self.use_hard_topk = 1 if use_hard_topk else 0
         self.lr_log = self.scheduler.get_last_lr()[0]
@@ -383,6 +382,7 @@ class SoftTopKTrainer(SAETrainer):
         l2_loss = e.pow(2).sum(dim=-1).mean()
         auxk_loss = self.get_auxiliary_loss(e.detach(), post_relu_acts)
         k_loss = self.get_k_loss(estimated_k)
+        self.k_loss = k_loss
         loss = l2_loss + self.k_loss_weight * k_loss + self.auxk_alpha * auxk_loss
 
         if not logging:
