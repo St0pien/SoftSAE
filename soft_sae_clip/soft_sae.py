@@ -381,7 +381,7 @@ class SoftTopKTrainer(SAETrainer):
 
         l2_loss = e.pow(2).sum(dim=-1).mean()
         auxk_loss = self.get_auxiliary_loss(e.detach(), post_relu_acts)
-        k_loss = self.get_k_loss(estimated_k)
+        k_loss = self.get_k_loss(estimated_k) if not use_hard_topk else 0.0
         self.k_loss = k_loss
         loss = l2_loss + self.k_loss_weight * k_loss + self.auxk_alpha * auxk_loss
 
