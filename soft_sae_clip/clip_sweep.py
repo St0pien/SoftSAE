@@ -1,4 +1,4 @@
-from dictionary_learning.evaluation import evaluate
+from custom_core.evaluation import evaluate
 import torch
 import wandb
 import argparse
