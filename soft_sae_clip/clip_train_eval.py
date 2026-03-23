@@ -1,12 +1,12 @@
 from custom_core.evaluation import evaluate
 
-from soft_sae_clip.soft_sae import SoftTopKSAE, SoftTopKTrainer
+from soft_sae import SoftTopKSAE, SoftTopKTrainer
 import torch
 from custom_core.npy_buffer import NpyActivationBuffer
 from custom_core.training import ActivationsNormalization, trainSAE
 from baselines.batch_topk import BatchTopKTrainer, BatchTopKSAE
-from soft_sae_clip.baselines.top_k import TopKTrainer, AutoEncoderTopK
-from soft_sae_clip.baselines.matryoshka_batch_top_k import (
+from baselines.top_k import TopKTrainer, AutoEncoderTopK
+from baselines.matryoshka_batch_top_k import (
     MatryoshkaBatchTopKSAE,
     MatryoshkaBatchTopKTrainer,
 )
@@ -49,7 +49,7 @@ def main():
     print(trainer_config)
 
     wb_name = f"{args.architecture}" if args.wandb_name is None else args.wandb_name
-    with wandb.init("st0pien-default-team", project="SoftSAE", name=wb_name) as run:
+    with wandb.init("st0pien-default-team", project="SoftSAE-CLIP", name=wb_name) as run:
         buffered_data = NpyActivationBuffer(
             args.data_train,
             npy_length=2_905_954,
