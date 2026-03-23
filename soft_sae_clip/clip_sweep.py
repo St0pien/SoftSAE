@@ -30,12 +30,12 @@ from soft_sae import SoftTopKTrainer, SoftTopKSAE
 
 sweep_parameters = {
     "k": {"values": [60, 100, 140, 180, 220, 260]},
-    "k_max": {"values": [None, 400]},
-    "alpha_anneal_steps": {"values": [1000, 500, 4000, 6000]},
-    "hard_topk_steps": {"values": [6000, 8000, 4000, 2000]},
-    "lr": {"values": [0.0006, 0.001, 0.0001]},
-    "auxk_alpha": {"values": [0.1, 1.0, 0.5]},
-    "k_loss_weight": {"values": [2.0, 1.0, 0.5]},
+    # "k_max": {"values": [None, 400]},
+    # "alpha_anneal_steps": {"values": [1000, 500, 4000, 6000]},
+    # "hard_topk_steps": {"values": [6000, 8000, 4000, 2000]},
+    # "lr": {"values": [0.0006, 0.001, 0.0001]},
+    # "auxk_alpha": {"values": [0.1, 1.0, 0.5]},
+    # "k_loss_weight": {"values": [2.0, 1.0, 0.5]},
 }
 
 
@@ -76,6 +76,12 @@ shared_config = {
     "decay_start": 6500,
     "k_anneal_steps": 1600,
     "warmup_steps": 1900,
+    "k_max": None,
+    "alpha_anneal_steps": 1000,
+    "hard_topk_steps": 6000,
+    "lr": 0.0006,
+    "auxk_alpha": 0.1,
+    "k_loss_weight": 1.0,
 }
 
 
