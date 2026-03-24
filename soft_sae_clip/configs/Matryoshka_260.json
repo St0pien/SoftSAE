@@ -5,7 +5,7 @@
     "layer": -1,
     "lm_name": "CLIP",
     "k": 260,
-    "dead_fleature_threshold": 400000,
+    "dead_feature_threshold": 400000,
     "decay_start": 6500,
     "k_anneal_steps": 1600,
     "lr": 0.0006,
