@@ -15,22 +15,46 @@ from dictionary_learning.trainers.trainer import (
 from lapsum.topk import soft_topk
 
 
+# def topk_per_row(x, k):
+#     # x: (B, D)
+#     # k: (B,)
+#     _, D = x.shape
+
+#     # sort each row descending
+#     vals, idx = t.sort(x, dim=1, descending=True)
+
+#     # create a mask: True for positions < k[i]
+#     arange = t.arange(D, device=x.device)
+#     mask = arange.unsqueeze(0) < k.unsqueeze(1)  # (B, D)
+
+#     # zero out values beyond top k[i]
+#     vals = vals * mask
+
+#     # scatter back to original positions
+#     out = t.zeros_like(x)
+#     out.scatter_(1, idx, vals)
+
+#     return out
+
 def topk_per_row(x, k):
     # x: (B, D)
     # k: (B,)
-    _, D = x.shape
+    B, D = x.shape
 
-    # sort each row descending
-    vals, idx = t.sort(x, dim=1, descending=True)
+    # get max k in batch (scalar)
+    k_max = int(k.max())
 
-    # create a mask: True for positions < k[i]
-    arange = t.arange(D, device=x.device)
-    mask = arange.unsqueeze(0) < k.unsqueeze(1)  # (B, D)
+    # compute only top-k_max
+    vals, idx = t.topk(x, k_max, dim=1)
 
-    # zero out values beyond top k[i]
+    # build mask for per-row k
+    arange = t.arange(k_max, device=x.device)
+    mask = arange.unsqueeze(0) < k.unsqueeze(1)  # (B, k_max)
+
+    # zero out values beyond each row's k
     vals = vals * mask
 
-    # scatter back to original positions
+    # scatter back to full tensor
     out = t.zeros_like(x)
     out.scatter_(1, idx, vals)
 
@@ -38,15 +62,26 @@ def topk_per_row(x, k):
 
 
 class SoftSAE(Dictionary, nn.Module):
-    def __init__(self, activation_dim: int, dict_size: int, k: int, alpha: float):
+    def __init__(
+        self,
+        activation_dim: int,
+        dict_size: int,
+        k: int,
+        alpha: float,
+        k_max: Optional[int] = None,
+    ):
         super().__init__()
         self.activation_dim = activation_dim
         self.dict_size = dict_size
+
+        if k_max is None:
+            k_max = k * 2
 
         assert isinstance(k, int) and k > 0, f"k={k} must be a positive integer"
         assert 0.0 < alpha < 1, f"alpha={alpha} must be in range: (0.0,1.0)"
         self.register_buffer("k", t.tensor(k, dtype=t.int))
         self.register_buffer("alpha", t.tensor(alpha, dtype=t.float32))
+        self.register_buffer("k_max", t.tensor(k_max, dtype=t.int))
         self.register_buffer("norm_factor", t.tensor(1.0, dtype=t.float32))
 
         self.alpha.requires_grad_(False)
@@ -72,7 +107,7 @@ class SoftSAE(Dictionary, nn.Module):
         if with_norm_scaling:
             x = x / self.norm_factor
         logit = self.k_estimator(x - self.b_dec).squeeze(-1)
-        k_hat = logit * (self.k * 2)
+        k_hat = logit * self.k_max
         return t.clamp(k_hat, min=1, max=self.dict_size)
 
     def encode(
@@ -85,31 +120,30 @@ class SoftSAE(Dictionary, nn.Module):
         if with_norm_scaling:
             x /= self.norm_factor
 
-        with t.set_grad_enabled(not use_hard_top_k):
+        post_relu_feat_acts = F.relu(self.encoder(x - self.b_dec))
+
+        if use_hard_top_k:
+            with t.no_grad():
+                k_estimate = self.estimate_k(x, with_norm_scaling=False).long()
+                encoded_acts = topk_per_row(post_relu_feat_acts, k_estimate)
+        else:
             k_estimate = self.estimate_k(x, with_norm_scaling=False)
-            post_relu_feat_acts_BF = nn.functional.relu(self.encoder(x - self.b_dec))
-
-            if use_hard_top_k:
-                k_estimate = k_estimate.long()
-                encoded_acts_BF = topk_per_row(post_relu_feat_acts_BF, k_estimate)
-            else:
-                weights = soft_topk(
-                    post_relu_feat_acts_BF,
-                    k_estimate.view(k_estimate.shape[0], 1),
-                    self.alpha.clone(),
-                )
-
-                encoded_acts_BF = post_relu_feat_acts_BF * weights
+            weights = soft_topk(
+                post_relu_feat_acts,
+                k_estimate.view(k_estimate.shape[0], 1),
+                self.alpha.clone(),
+            )
+            encoded_acts = post_relu_feat_acts * weights
 
         if return_active:
             return (
-                encoded_acts_BF,
-                encoded_acts_BF.sum(0) > 0,
-                post_relu_feat_acts_BF,
+                encoded_acts,
+                encoded_acts.sum(0) > 0,
+                post_relu_feat_acts,
                 k_estimate,
             )
         else:
-            return encoded_acts_BF
+            return encoded_acts
 
     def decode(self, x: t.Tensor) -> t.Tensor:
         return self.decoder(x) + self.b_dec
@@ -144,8 +178,9 @@ class SoftSAE(Dictionary, nn.Module):
         if alpha is None:
             alpha = state_dict["alpha"].item()
         elif "alpha" in state_dict and alpha != state_dict["alpha"].item():
+            pass
             raise ValueError(
-                f"alpha={alpha} != {state_dict["alpha"].item()}=state_dict['k']"
+                f"alpha={alpha} != {state_dict['alpha'].item()}=state_dict['alpha']"
             )
 
         autoencoder = cls(activation_dim, dict_size, k, alpha)
@@ -335,13 +370,12 @@ class SoftSAETrainer(SAETrainer):
         return F.softplus(estimated_k.mean() - self.ae.k, beta=5.0)
 
     def loss(self, x, step=None, logging=False):
-
         use_hard_topk = self.hard_topk_steps is not None and step > (
             self.steps - self.hard_topk_steps
         )
 
         f, active_indices_F, post_relu_acts_BF, estimated_k = self.ae.encode(
-            x, return_active=True, use_hard_top_k=use_hard_topk
+            x, return_active=True, use_hard_top_k=use_hard_topk, with_norm_scaling=False
         )
 
         x_hat = self.ae.decode(f)
@@ -356,17 +390,17 @@ class SoftSAETrainer(SAETrainer):
         self.num_tokens_since_fired += num_tokens_in_step
         self.num_tokens_since_fired[did_fire] = 0
 
-        k_loss = self.get_k_loss(estimated_k) if not use_hard_topk else 0.0
         self.avg_k = estimated_k.mean(dtype=t.float32)
         self.min_k = estimated_k.min()
         self.max_k = estimated_k.max()
-        self.k_loss = k_loss
         self.ae_soft_topk_alpha = self.ae.alpha.item()
         self.use_hard_topk = 1 if use_hard_topk else 0
         self.lr_log = self.scheduler.get_last_lr()[0]
 
         l2_loss = e.pow(2).sum(dim=-1).mean()
         auxk_loss = self.get_auxiliary_loss(e.detach(), post_relu_acts_BF)
+        k_loss = self.get_k_loss(estimated_k) if not use_hard_topk else 0.0
+        self.k_loss = k_loss
         loss = l2_loss + self.k_loss_weight * k_loss + self.auxk_alpha * auxk_loss
 
         if not logging:
@@ -385,7 +419,6 @@ class SoftSAETrainer(SAETrainer):
 
     def update(self, step, x):
         if step == 0:
-            # VERIFY: Should we scale x before median?
             median = self.geometric_median(x)
             median = median.to(self.ae.b_dec.dtype)
             self.ae.b_dec.data = median

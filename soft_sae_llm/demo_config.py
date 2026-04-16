@@ -66,8 +66,8 @@ print(f"NOTE: Training on {num_tokens} tokens")
 
 eval_num_inputs = 200
 random_seeds = [0]
-dictionary_widths = [2**14, 2**16]
-# dictionary_widths = [2**14]
+# dictionary_widths = [2**14, 2**16]
+dictionary_widths = [2**14]
 
 WARMUP_STEPS = 2300
 SPARSITY_WARMUP_STEPS = 5000
@@ -79,7 +79,7 @@ max_activation_norm_multiple = 10
 learning_rates = [0.0006]
 
 
-wandb_project = "SoftSAE-LLM"
+wandb_project = "SoftSAE-LLM-v2"
 
 LLM_CONFIG = {
     "EleutherAI/pythia-70m-deduped": LLMConfig(
@@ -233,7 +233,7 @@ class SoftSAETrainerConfig(BaseTrainerConfig):
     k_loss_weight: float = 1.0
     soft_topk_alpha: float = 0.0001
     hard_topk_steps: Optional[int] = None
-    dead_feature_threshold: int = 400_000
+    dead_feature_threshold: int = 10_000_000
 
 
 def get_trainer_configs(
@@ -420,7 +420,7 @@ def get_trainer_configs(
                 hard_topk_steps=7_000,
                 wandb_name=f"SoftSAETrainer-{model_name}-{submodule_name}",
                 auxk_alpha=0.08,
-                k_loss_weight=2.1
+                k_loss_weight=1.0
             )
             trainer_configs.append(asdict(config))
 
