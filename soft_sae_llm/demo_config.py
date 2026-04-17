@@ -60,7 +60,7 @@ class SparsityPenalties:
     gated: list[float]
 
 
-num_tokens = 100_000_000
+num_tokens = 500_000_000
 
 print(f"NOTE: Training on {num_tokens} tokens")
 
@@ -69,14 +69,14 @@ random_seeds = [0]
 # dictionary_widths = [2**14, 2**16]
 dictionary_widths = [2**14]
 
-WARMUP_STEPS = 2300
+WARMUP_STEPS = 1000
 SPARSITY_WARMUP_STEPS = 5000
-DECAY_START_FRACTION = 0.2
-K_ANNEAL_END_FRACTION = 0.03
+DECAY_START_FRACTION = 0.8
+K_ANNEAL_END_FRACTION = 0.01
 remove_bos = True
 max_activation_norm_multiple = 10
 
-learning_rates = [0.0006]
+learning_rates = [0.0003]
 
 
 wandb_project = "SoftSAE-LLM-v2"
@@ -113,7 +113,7 @@ SPARSITY_PENALTIES = SparsityPenalties(
 )
 
 
-TARGET_L0s = [80, 160]
+TARGET_L0s = [20, 40, 80, 160, 320, 640]
 # TARGET_L0s = [20, 40, 80, 160, 320, 640]
 
 
@@ -416,10 +416,10 @@ def get_trainer_configs(
                 seed=seed,
                 k=k,
                 k_anneal_steps=anneal_end,
-                alpha_anneal_steps=1200,
-                hard_topk_steps=7_000,
+                alpha_anneal_steps=2500,
+                hard_topk_steps=10_000,
                 wandb_name=f"SoftSAETrainer-{model_name}-{submodule_name}",
-                auxk_alpha=0.08,
+                auxk_alpha=1/32,
                 k_loss_weight=1.0
             )
             trainer_configs.append(asdict(config))
