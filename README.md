@@ -64,5 +64,5 @@ python softsae_saebench/absorption.py
 
 **SCR/TPP**
 ```bash
-python softsae_saebench/.py
+python softsae_saebench/scr_tpp.py
 ```
