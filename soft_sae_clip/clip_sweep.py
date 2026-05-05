@@ -45,7 +45,7 @@ sweep_configuration = {
     "parameters": sweep_parameters,
 }
 
-entity = "st0pien-default-team"
+entity = "---"
 project = "SoftSAE-CLIP"
 
 steps = 40_000

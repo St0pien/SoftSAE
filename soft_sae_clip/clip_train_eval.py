@@ -49,56 +49,57 @@ def main():
     print(trainer_config)
 
     wb_name = f"{args.architecture}" if args.wandb_name is None else args.wandb_name
-    with wandb.init("st0pien-default-team", project="SoftSAE-CLIP", name=wb_name) as run:
-        buffered_data = NpyActivationBuffer(
-            args.data_train,
-            npy_length=2_905_954,
-            d_submodule=512,
-            ctx_len=1,
-            out_batch_size=8192,
-            device="cuda",
-            dtype=torch.float32,
-            seed=args.seed,
-        )
+    # with wandb.init("---", project="SoftSAE-CLIP", name=wb_name) as run:
+    buffered_data = NpyActivationBuffer(
+        args.data_train,
+        npy_length=2_905_954,
+        d_submodule=512,
+        ctx_len=1,
+        out_batch_size=8192,
+        device="cuda",
+        dtype=torch.float32,
+        seed=args.seed,
+    )
 
-        path = trainSAE(
-            data=buffered_data,
-            steps=args.n,
-            trainer_config=trainer_config,
-            use_wandb=True,
-            log_steps=50,
-            save_dir="results/checkpoints",
-            normalize_activations=ActivationsNormalization.SCALE_SHIFT,
-            run=run,
-        )
+    path = trainSAE(
+        data=buffered_data,
+        steps=args.n,
+        trainer_config=trainer_config,
+        # use_wandb=True,
+        use_wandb=False,
+        log_steps=50,
+        save_dir="results/checkpoints",
+        normalize_activations=ActivationsNormalization.SCALE_SHIFT,
+        # run=run,
+    )
 
-        buffered_val_data = NpyActivationBuffer(
-            args.data_val,
-            npy_length=1_281_167,
-            d_submodule=512,
-            ctx_len=1,
-            out_batch_size=8192,
-            device="cuda",
-            dtype=torch.float32,
-            seed=args.seed,
-        )
+    buffered_val_data = NpyActivationBuffer(
+        args.data_val,
+        npy_length=1_281_167,
+        d_submodule=512,
+        ctx_len=1,
+        out_batch_size=8192,
+        device="cuda",
+        dtype=torch.float32,
+        seed=args.seed,
+    )
 
-        trained_sae = architectures[args.architecture]["model"].from_pretrained(
-            path,
-            device="cuda",
-        )
+    trained_sae = architectures[args.architecture]["model"].from_pretrained(
+        path,
+        device="cuda",
+    )
 
-        evals = evaluate(
-            trained_sae,
-            activations=buffered_val_data,
-            device="cuda",
-            n_batches=1000,
-            batch_size=4096,
-            normalize_batch=True,
-        )
+    evals = evaluate(
+        trained_sae,
+        activations=buffered_val_data,
+        device="cuda",
+        n_batches=1000,
+        batch_size=4096,
+        normalize_batch=True,
+    )
 
-        print(evals)
-        run.summary.update({f"test/{key}": value for key, value in evals.items()})
+    print(evals)
+    # run.summary.update({f"test/{key}": value for key, value in evals.items()})
 
 
 if __name__ == "__main__":
