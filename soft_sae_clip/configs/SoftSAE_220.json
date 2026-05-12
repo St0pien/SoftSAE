@@ -1,0 +1,20 @@
+{
+    "lr": 0.0006,
+    "warmup_steps": 1900,
+    "decay_start": 6500,
+    "dead_feature_threshold": 400000,
+    "k_loss_weight": 1.0,
+    "k_loss_beta": 5.0,
+    "k_anneal_steps": 1600,
+    "alpha_anneal_steps": null,
+    "soft_topk_alpha": 0.0001,
+    "hard_topk_steps": 6000,
+    "activation_dim": 512,
+    "dict_size": 4096,
+    "k": 220,
+    "k_max": null,
+    "device": "cuda",
+    "layer": -1,
+    "lm_name": "CLIP",
+    "submodule_name": null
+}
