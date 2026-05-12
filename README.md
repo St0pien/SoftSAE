@@ -3,6 +3,8 @@
 # SoftSAE
 ### Dynamic Top-K Selection for Adaptive Sparse Autoencoders
 
+Jakub Stępień, Marcin Mazur, Jacek Tabor, Przemysław Spurek
+
 <br>
 
 <!-- Replace the path below with your teaser image -->
