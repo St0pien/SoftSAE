@@ -5,7 +5,7 @@
 
 Jakub Stępień, Marcin Mazur, Jacek Tabor, Przemysław Spurek
 
-<br>
+[![arXiv](https://img.shields.io/badge/arXiv-2401.12345-b31b1b.svg)]((https://arxiv.org/abs/2605.06610))
 
 <!-- Replace the path below with your teaser image -->
 <img src="assets/teaser.png" alt="SoftSAE teaser" width="700"/>
